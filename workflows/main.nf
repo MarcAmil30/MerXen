@@ -3950,7 +3950,7 @@ workflow TERMINAL_ANALYSES {
         .mix(mender_extra_clustering_terminal_events_ch)
 
     pair_terminal_grouped_ch = pair_terminal_events_ch
-        .join(pair_terminal_specs_ch)
+        .combine(pair_terminal_specs_ch, by: 0)
         .filter { _pairId, eventStage, _done, expectedStage, _expectedCount ->
             eventStage == expectedStage
         }
