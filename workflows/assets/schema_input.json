@@ -1,0 +1,52 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "MerXen samplesheet",
+    "description": "Input files per pair. Columns not listed here are read as plain settings by main.nf.",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "pair_id": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "pair_id must be provided and cannot contain spaces",
+                "meta": ["pair_id"]
+            },
+            "merscope_dir": {
+                "type": "string",
+                "format": "directory-path",
+                "exists": true,
+                "description": "Raw MERSCOPE region export"
+            },
+            "merscope_spatialdata_path": {
+                "type": "string",
+                "format": "directory-path",
+                "description": "Existing MERSCOPE SpatialData zarr, used when merscope_dir is empty"
+            },
+            "merscope_transform_path": {
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "description": "Optional micron-to-mosaic transform override"
+            },
+            "xenium_dir": {
+                "type": "string",
+                "format": "directory-path",
+                "exists": true,
+                "description": "Raw Xenium output bundle"
+            },
+            "xenium_spatialdata_path": {
+                "type": "string",
+                "format": "directory-path",
+                "description": "Existing Xenium SpatialData zarr, used when xenium_dir is empty"
+            },
+            "xenium_spec_path": {
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "description": "Optional Xenium experiment spec"
+            }
+        },
+        "required": ["pair_id"]
+    }
+}

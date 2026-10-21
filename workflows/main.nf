@@ -1,5 +1,6 @@
 nextflow.enable.dsl = 2
 
+include { validateParameters; samplesheetToList } from "plugin/nf-schema"
 include { BUILD_SPATIALDATA } from "./modules/spatialdata_build"
 include { ENSURE_PROSEG } from "./modules/proseg_bootstrap"
 include { CELLPOSE_NUCLEI_SEGMENT; SEGMENT } from "./modules/segmentation"
@@ -288,6 +289,8 @@ def requirePlatformInput(row, pairId, platform) {
     throw new IllegalArgumentException("Unknown platform: ${platform}")
 }
 
+// Settings only: input_path and the transform/spec files are staged as path
+// inputs and filled in by BUILD_SPATIALDATA itself.
 def buildConfigForPlatform(row, pairId, platform) {
     def input = requirePlatformInput(row, pairId, platform)
     if (platform == "MERSCOPE") {
@@ -307,10 +310,8 @@ def buildConfigForPlatform(row, pairId, platform) {
         return [
             dataset_name: "${pairId}_MERSCOPE",
             platform: "MERSCOPE",
-            input_path: input.inputDir ?: input.spatialdataPath,
             output_path: "spatialdata_out/source_spatialdata.zarr",
             persistent_output_path: input.spatialdataPath ?: null,
-            merscope_transform_path: chooseField(row, ["merscope_transform_path"]) ?: null,
             merscope: merscopeOptions,
             xenium: [:],
         ]
@@ -320,10 +321,8 @@ def buildConfigForPlatform(row, pairId, platform) {
         return [
             dataset_name: "${pairId}_XENIUM",
             platform: "XENIUM",
-            input_path: input.inputDir ?: input.spatialdataPath,
             output_path: "spatialdata_out/source_spatialdata.zarr",
             persistent_output_path: input.spatialdataPath ?: null,
-            xenium_spec_path: chooseField(row, ["xenium_spec_path"]) ?: null,
             merscope: [:],
             xenium: [:],
         ]
@@ -2039,6 +2038,18 @@ workflow {
     if (!params.samplesheet) {
         error "Missing required parameter: --samplesheet"
     }
+    validateParameters()
+
+    // nf-schema turns the samplesheet's file columns into staged inputs;
+    // [] marks an empty optional column.
+    sample_files_ch = channel
+        .fromList(samplesheetToList(params.samplesheet, "${projectDir}/assets/schema_input.json"))
+        .map { meta, merscopeDir, merscopeZarr, merscopeTransform, xeniumDir, xeniumZarr, xeniumSpec ->
+            tuple(meta.pair_id, [
+                MERSCOPE: [input: merscopeDir ?: merscopeZarr, aux: merscopeTransform],
+                XENIUM: [input: xeniumDir ?: xeniumZarr, aux: xeniumSpec],
+            ])
+        }
 
     samplesheet_ch = channel
         .fromPath(params.samplesheet, checkIfExists: true)
@@ -2081,7 +2092,7 @@ workflow {
             tuple(pairId, row, settings)
         }
 
-    build_inputs_ch = sample_rows_ch.flatMap { pairId, row, settings ->
+    build_inputs_ch = sample_rows_ch.join(sample_files_ch).flatMap { pairId, row, settings, files ->
         if (!settings.run_build) {
             []
         } else {
@@ -2093,6 +2104,8 @@ workflow {
                     pairId,
                     platform,
                     groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(buildConfig)),
+                    files[platform].input,
+                    files[platform].aux ?: [],
                 )
             }
         }
