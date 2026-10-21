@@ -4,13 +4,23 @@ process BUILD_SPATIALDATA {
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/spatialdata" }, mode: "symlink", overwrite: true
 
     input:
-    tuple val(key), val(pair_id), val(platform), val(build_config_json)
+    // raw_input and aux_input are staged by Nextflow; build_config_json holds settings only
+    tuple val(key), val(pair_id), val(platform), val(build_config_json), path(raw_input), path(aux_input)
 
     output:
     tuple val(key), val(pair_id), val(platform), path("spatialdata_out/source_spatialdata.zarr")
 
     script:
     def forceFlag = params.force_spatialdata_build ? "--force-rerun" : ""
+    def buildConfig = new groovy.json.JsonSlurper().parseText(build_config_json)
+    // Readers name elements after the raw folder's parent, so stage it under the
+    // platform name rather than the task work directory
+    buildConfig.input_path = "${platform}/${raw_input}".toString()
+    if (aux_input) {
+        def auxField = platform == "MERSCOPE" ? "merscope_transform_path" : "xenium_spec_path"
+        buildConfig[auxField] = "${aux_input}".toString()
+    }
+    def buildConfigText = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(buildConfig))
     """
     set -euo pipefail
     export OMP_NUM_THREADS="${task.cpus}"
@@ -24,8 +34,11 @@ process BUILD_SPATIALDATA {
     export POLARS_MAX_THREADS="${task.cpus}"
     export DASK_NUM_WORKERS="${task.cpus}"
 
+    mkdir -p "${platform}"
+    ln -sfn "../${raw_input}" "${platform}/${raw_input}"
+
     cat > build_config.json <<'JSON'
-${build_config_json}
+${buildConfigText}
 JSON
 
     merxen build-spatialdata --config build_config.json ${forceFlag}

@@ -1,0 +1,30 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "MerXen parameters",
+    "description": "MERSCOPE + Xenium spatial transcriptomics pipeline",
+    "type": "object",
+    "$defs": {
+        "input_output_options": {
+            "title": "Input/output options",
+            "type": "object",
+            "required": ["samplesheet", "outdir"],
+            "properties": {
+                "samplesheet": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "schema": "assets/schema_input.json",
+                    "mimetype": "text/csv",
+                    "pattern": "^\\S+\\.csv$",
+                    "description": "One row per MERSCOPE/Xenium pair"
+                },
+                "outdir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Where results are published"
+                }
+            }
+        }
+    },
+    "allOf": [{ "$ref": "#/$defs/input_output_options" }]
+}
