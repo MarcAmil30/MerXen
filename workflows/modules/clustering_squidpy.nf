@@ -1,3 +1,21 @@
+// Reference inputs the clustering broad annotation reads, by config field.
+// main.nf stages the files and existing cache directory, then passes the local
+// names back in to CLUSTERING_SQUIDPY_PREPARE and _COMPUTE.
+def clusteringReferenceInputs() {
+    def rawPipelineSpecies = params.species == null ? "human" : params.species.toString().trim().toLowerCase()
+    def pipelineSpecies = rawPipelineSpecies in ["mouse", "mus_musculus", "mus musculus"] ? "mouse" : "human"
+    def referenceAtlas = params.clustering_squidpy_broad_reference_atlas == null ? (pipelineSpecies == "mouse" ? "wmb" : "whb") : params.clustering_squidpy_broad_reference_atlas.toString().trim().toLowerCase()
+    def whb = referenceAtlas == "whb"
+    def inputs = [
+        marker_lookup_path: params.clustering_squidpy_broad_marker_lookup_path ?: (whb ? params.clustering_squidpy_whb_marker_lookup_path : null),
+        taxonomy_metadata_path: params.clustering_squidpy_broad_taxonomy_metadata_path ?: (whb ? params.clustering_squidpy_whb_taxonomy_metadata_path : null),
+        cluster_membership_path: params.clustering_squidpy_broad_cluster_membership_path ?: (whb ? params.clustering_squidpy_whb_cluster_membership_path : null),
+        reference_cache_dir: params.clustering_squidpy_broad_reference_cache_dir == null ? file(params.outdir).toAbsolutePath().resolve("mapmycells_cache") : params.clustering_squidpy_broad_reference_cache_dir,
+    ].collectEntries { field, value -> [(field): value ? value.toString() : null] }
+    inputs.reference_gene_metadata_paths = (params.clustering_squidpy_broad_reference_gene_metadata_paths ?: []).collect { path -> path.toString() }
+    return inputs
+}
+
 process CLUSTERING_SQUIDPY_PREPARE {
     tag "${pair_id}:${segmentation}"
 
@@ -5,6 +23,8 @@ process CLUSTERING_SQUIDPY_PREPARE {
     tuple val(pair_id),
         val(segmentation),
         val(samples_json)
+    // clusteringReferenceInputs() as staged by main.nf
+    tuple val(reference_inputs), path(reference_files, stageAs: "inputs/??/*")
 
     output:
     tuple val(pair_id),
@@ -19,12 +39,11 @@ process CLUSTERING_SQUIDPY_PREPARE {
     def hierarchicalEnabled = params.clustering_squidpy_hierarchical_enabled == null ? true : params.clustering_squidpy_hierarchical_enabled.toString().trim().toLowerCase() == "true"
     def referenceAtlas = params.clustering_squidpy_broad_reference_atlas == null ? (pipelineSpecies == "mouse" ? "wmb" : "whb") : params.clustering_squidpy_broad_reference_atlas.toString().trim().toLowerCase()
     def markerLevel = params.clustering_squidpy_broad_marker_level == null ? (referenceAtlas == "wmb" ? "CCN20230722_CLAS" : "CCN202210140_SUPC") : params.clustering_squidpy_broad_marker_level.toString()
-    def defaultReferenceCacheDir = file(params.outdir).toAbsolutePath().resolve("mapmycells_cache").toString()
-    def referenceCacheDir = params.clustering_squidpy_broad_reference_cache_dir == null ? defaultReferenceCacheDir : params.clustering_squidpy_broad_reference_cache_dir.toString()
-    def referenceGeneMetadataPaths = params.clustering_squidpy_broad_reference_gene_metadata_paths ?: []
-    def markerLookupPath = params.clustering_squidpy_broad_marker_lookup_path ?: (referenceAtlas == "whb" ? params.clustering_squidpy_whb_marker_lookup_path : null)
-    def taxonomyMetadataPath = params.clustering_squidpy_broad_taxonomy_metadata_path ?: (referenceAtlas == "whb" ? params.clustering_squidpy_whb_taxonomy_metadata_path : null)
-    def clusterMembershipPath = params.clustering_squidpy_broad_cluster_membership_path ?: (referenceAtlas == "whb" ? params.clustering_squidpy_whb_cluster_membership_path : null)
+    def referenceCacheDir = reference_inputs.reference_cache_dir
+    def referenceGeneMetadataPaths = reference_inputs.reference_gene_metadata_paths
+    def markerLookupPath = reference_inputs.marker_lookup_path
+    def taxonomyMetadataPath = reference_inputs.taxonomy_metadata_path
+    def clusterMembershipPath = reference_inputs.cluster_membership_path
     """
     set -euo pipefail
     export OMP_NUM_THREADS="${task.cpus}"
@@ -107,6 +126,8 @@ process CLUSTERING_SQUIDPY_COMPUTE {
         val(samples_json),
         path(clustering_config),
         path(prepared_dir)
+    // same staging as PREPARE, so the config's inputs/<nn>/ names resolve here
+    tuple val(_reference_inputs), path(reference_files, stageAs: "inputs/??/*")
 
     output:
     tuple val(pair_id),
