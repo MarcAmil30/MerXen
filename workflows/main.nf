@@ -514,6 +514,7 @@ def mergeMecrSamplesJson(samplesJsonValues) {
     )
 }
 
+// Returns [samples JSON, annotation files to stage].
 def spatialGeneSamplesJson(samplesJson, row) {
     def samples = new groovy.json.JsonSlurper().parseText(samplesJson.toString())
     samples.each { sample ->
@@ -538,9 +539,12 @@ def spatialGeneSamplesJson(samplesJson, row) {
             corticalDepthAnnotationPath(row, platform, "annotation")
         )
     }
-    return groovy.json.JsonOutput.prettyPrint(
-        groovy.json.JsonOutput.toJson(samples)
-    )
+    def files = []
+    samples.each { sample -> stageConfigFiles(sample, annotationPathFields(), files) }
+    return [
+        groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(samples)),
+        files,
+    ]
 }
 
 def corticalDepthConfigForPlatform(
@@ -1074,6 +1078,26 @@ def appendMapMyCellsPreflightChecks(errors, settings, params) {
 
 def optionalNormalizedPathString(rawPath) {
     return isBlankPath(rawPath) ? null : normalizedPath(rawPath).toString()
+}
+
+// Path fields of the cortical-depth and spatial-gene configs that name
+// per-sample annotation files.
+def annotationPathFields() {
+    return ["pial_boundary_path", "wm_boundary_path", "side_boundary_path", "exclusion_path", "ribbon_path", "annotation_path"]
+}
+
+// Swap each set path field of config for the name it is staged under and
+// add the file to files, for a path(input_files, stageAs: "inputs/??/*")
+// input: the n-th file lands at inputs/<nn>/<name>, so names cannot collide.
+def stageConfigFiles(config, fields, files) {
+    fields.each { field ->
+        if (!isBlankPath(config[field])) {
+            def staged = file(config[field].toString())
+            files << staged
+            config[field] = String.format("inputs/%02d/%s", files.size(), staged.name)
+        }
+    }
+    return config
 }
 
 def corticalDepthAnnotationPath(row, platform, role) {
@@ -3475,11 +3499,13 @@ workflow {
             samplesJson,
             transcriptAnalysisEnabled,
             row ->
+            def annotated = spatialGeneSamplesJson(samplesJson, row)
             tuple(
                 pairId,
                 segmentation,
-                spatialGeneSamplesJson(samplesJson, row),
+                annotated[0],
                 transcriptAnalysisEnabled,
+                annotated[1],
             )
         }
 
@@ -3636,12 +3662,15 @@ workflow TERMINAL_ANALYSES {
                 analysisSegmentations,
                 params,
             )
+            def annotationFiles = []
+            stageConfigFiles(depthConfig, annotationPathFields(), annotationFiles)
             tuple(
                 key,
                 pairId,
                 platform,
                 groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(depthConfig)),
                 latestZarr,
+                annotationFiles,
             )
         }
 
