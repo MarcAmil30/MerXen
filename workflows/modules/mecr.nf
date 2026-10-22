@@ -1,3 +1,25 @@
+// Reference inputs MECR_REFERENCE reads, by config field. main.nf stages the
+// files and existing cache directory, then passes the local names back in.
+def mecrReferenceInputs(referenceAtlas) {
+    def rawH5adPaths = params.mecr_reference_h5ad_paths
+    def h5adPaths = rawH5adPaths == null
+        ? []
+        : (rawH5adPaths instanceof Collection ? rawH5adPaths : rawH5adPaths.toString().split(","))
+            .collect { path -> path.toString().trim() }
+            .findAll { path -> path }
+    def whb = referenceAtlas == "whb"
+    def inputs = [
+        neurons_h5ad_path: params.mecr_neurons_h5ad_path ?: (whb ? params.mecr_whb_neurons_h5ad_path : null),
+        nonneurons_h5ad_path: params.mecr_nonneurons_h5ad_path ?: (whb ? params.mecr_whb_nonneurons_h5ad_path : null),
+        cell_metadata_path: params.mecr_cell_metadata_path ?: (whb ? params.mecr_whb_cell_metadata_path : null),
+        taxonomy_metadata_path: params.mecr_taxonomy_metadata_path ?: (whb ? params.mecr_whb_taxonomy_metadata_path : null),
+        cluster_membership_path: params.mecr_cluster_membership_path ?: (whb ? params.mecr_whb_cluster_membership_path : null),
+        reference_cache_dir: params.mecr_reference_cache_dir == null ? file(params.outdir).toAbsolutePath().resolve("mapmycells_cache") : params.mecr_reference_cache_dir,
+    ].collectEntries { field, value -> [(field): value == null ? null : value.toString()] }
+    inputs.reference_h5ad_paths = h5adPaths
+    return inputs
+}
+
 process MECR_REFERENCE {
     tag "${reference_atlas.toUpperCase()}"
 
@@ -6,40 +28,13 @@ process MECR_REFERENCE {
     input:
     tuple val(reference_atlas),
         val(samples_json)
+    // mecrReferenceInputs() as staged by main.nf: local names plus the files
+    tuple val(reference_inputs), path(reference_files, stageAs: "inputs/??/*")
 
     output:
     path("mecr_reference_out")
 
     script:
-    def rawReferenceH5adPaths = params.mecr_reference_h5ad_paths
-    def referenceH5adPaths = rawReferenceH5adPaths == null
-        ? []
-        : (rawReferenceH5adPaths instanceof Collection
-            ? rawReferenceH5adPaths
-            : rawReferenceH5adPaths.toString().split(","))
-            .collect { it.toString().trim() }
-            .findAll { it }
-    def neuronsValue = params.mecr_neurons_h5ad_path ?: (reference_atlas == "whb" ? params.mecr_whb_neurons_h5ad_path : null)
-    def nonneuronsValue = params.mecr_nonneurons_h5ad_path ?: (reference_atlas == "whb" ? params.mecr_whb_nonneurons_h5ad_path : null)
-    def cellMetadataValue = params.mecr_cell_metadata_path ?: (reference_atlas == "whb" ? params.mecr_whb_cell_metadata_path : null)
-    def taxonomyMetadataValue = params.mecr_taxonomy_metadata_path ?: (reference_atlas == "whb" ? params.mecr_whb_taxonomy_metadata_path : null)
-    def clusterMembershipValue = params.mecr_cluster_membership_path ?: (reference_atlas == "whb" ? params.mecr_whb_cluster_membership_path : null)
-    def referenceCacheDir = params.mecr_reference_cache_dir == null ? file(params.outdir).toAbsolutePath().resolve("mapmycells_cache").toString() : params.mecr_reference_cache_dir.toString()
-    def neuronsPath = groovy.json.JsonOutput.toJson(
-        neuronsValue == null ? null : neuronsValue.toString()
-    )
-    def nonneuronsPath = groovy.json.JsonOutput.toJson(
-        nonneuronsValue == null ? null : nonneuronsValue.toString()
-    )
-    def cellMetadataPath = groovy.json.JsonOutput.toJson(
-        cellMetadataValue == null ? null : cellMetadataValue.toString()
-    )
-    def taxonomyMetadataPath = groovy.json.JsonOutput.toJson(
-        taxonomyMetadataValue == null ? null : taxonomyMetadataValue.toString()
-    )
-    def clusterMembershipPath = groovy.json.JsonOutput.toJson(
-        clusterMembershipValue == null ? null : clusterMembershipValue.toString()
-    )
     def taxonomyLevel = params.mecr_taxonomy_level == null ? null : params.mecr_taxonomy_level.toString()
     def targetClasses = params.mecr_target_broad_classes ?: []
     """
@@ -54,13 +49,13 @@ process MECR_REFERENCE {
   "output_dir": "mecr_reference_out",
   "samples": ${samples_json},
   "reference_atlas": ${groovy.json.JsonOutput.toJson(reference_atlas)},
-  "reference_h5ad_paths": ${groovy.json.JsonOutput.toJson(referenceH5adPaths)},
-  "neurons_h5ad_path": ${neuronsPath},
-  "nonneurons_h5ad_path": ${nonneuronsPath},
-  "cell_metadata_path": ${cellMetadataPath},
-  "taxonomy_metadata_path": ${taxonomyMetadataPath},
-  "cluster_membership_path": ${clusterMembershipPath},
-  "reference_cache_dir": ${groovy.json.JsonOutput.toJson(referenceCacheDir)},
+  "reference_h5ad_paths": ${groovy.json.JsonOutput.toJson(reference_inputs.reference_h5ad_paths)},
+  "neurons_h5ad_path": ${groovy.json.JsonOutput.toJson(reference_inputs.neurons_h5ad_path)},
+  "nonneurons_h5ad_path": ${groovy.json.JsonOutput.toJson(reference_inputs.nonneurons_h5ad_path)},
+  "cell_metadata_path": ${groovy.json.JsonOutput.toJson(reference_inputs.cell_metadata_path)},
+  "taxonomy_metadata_path": ${groovy.json.JsonOutput.toJson(reference_inputs.taxonomy_metadata_path)},
+  "cluster_membership_path": ${groovy.json.JsonOutput.toJson(reference_inputs.cluster_membership_path)},
+  "reference_cache_dir": ${groovy.json.JsonOutput.toJson(reference_inputs.reference_cache_dir)},
   "auto_download_reference": ${params.mecr_auto_download_reference},
   "taxonomy_level": ${groovy.json.JsonOutput.toJson(taxonomyLevel)},
   "gene_symbol_column": "${params.mecr_gene_symbol_column}",

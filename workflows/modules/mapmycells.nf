@@ -1,3 +1,21 @@
+// Reference inputs MAPMYCELLS reads, by config field. main.nf stages the files
+// and existing region cache directory, then passes the local names back in.
+def mapMyCellsReferenceInputs() {
+    def rawPipelineSpecies = params.species == null ? "human" : params.species.toString().trim().toLowerCase()
+    def pipelineSpecies = rawPipelineSpecies in ["mouse", "mus_musculus", "mus musculus"] ? "mouse" : "human"
+    def referenceAtlas = params.mapmycells_reference_atlas == null ? (pipelineSpecies == "mouse" ? "wmb" : "whb") : params.mapmycells_reference_atlas.toString().trim().toLowerCase()
+    def whb = referenceAtlas == "whb"
+    def geneIdFallbackPath = params.annotation_gene_id_fallback_csv
+    def geneIdFallbackDisabled = geneIdFallbackPath == null || geneIdFallbackPath.toString().trim().toLowerCase() in ["", "null", "false"]
+    return [
+        marker_lookup_path: params.mapmycells_marker_lookup_path ?: (whb ? params.mapmycells_whb_marker_lookup_path : null),
+        precomputed_stats_path: params.mapmycells_precomputed_stats_path ?: (whb ? params.mapmycells_whb_precomputed_stats_path : null),
+        gene_mapping_db_path: params.mapmycells_gene_mapping_db_path,
+        gene_id_fallback_csv: geneIdFallbackDisabled ? null : geneIdFallbackPath,
+        region_cache_dir: params.mapmycells_region_cache_dir == null ? file(params.outdir).toAbsolutePath().resolve("mapmycells_cache") : params.mapmycells_region_cache_dir,
+    ].collectEntries { field, value -> [(field): value == null ? null : value.toString()] }
+}
+
 process MAPMYCELLS {
     tag "${pair_id}:${segmentation}"
 
@@ -8,6 +26,8 @@ process MAPMYCELLS {
         val(segmentation),
         val(samples_json),
         path(clustering_out_dir, stageAs: "clustering_squidpy_input")
+    // mapMyCellsReferenceInputs() as staged by main.nf
+    tuple val(reference_inputs), path(reference_files, stageAs: "inputs/??/*")
 
     output:
     tuple val(pair_id), val(segmentation), path("mapmycells_out")
@@ -27,18 +47,13 @@ process MAPMYCELLS {
     def referenceAtlasJson = groovy.json.JsonOutput.toJson(referenceAtlas)
     def querySpeciesJson = groovy.json.JsonOutput.toJson(querySpecies)
     def autoDownloadReferencesJson = params.mapmycells_auto_download_references == null ? "true" : params.mapmycells_auto_download_references.toString()
-    def markerLookupPath = params.mapmycells_marker_lookup_path ?: (referenceAtlas == "whb" ? params.mapmycells_whb_marker_lookup_path : null)
-    def precomputedStatsPath = params.mapmycells_precomputed_stats_path ?: (referenceAtlas == "whb" ? params.mapmycells_whb_precomputed_stats_path : null)
-    def markerLookupJson = markerLookupPath == null ? "null" : groovy.json.JsonOutput.toJson(markerLookupPath.toString())
-    def precomputedStatsJson = precomputedStatsPath == null ? "null" : groovy.json.JsonOutput.toJson(precomputedStatsPath.toString())
-    def geneMappingDbJson = params.mapmycells_gene_mapping_db_path == null ? "null" : groovy.json.JsonOutput.toJson(params.mapmycells_gene_mapping_db_path.toString())
-    def geneIdFallbackPath = params.annotation_gene_id_fallback_csv
-    def geneIdFallbackDisabled = geneIdFallbackPath == null || geneIdFallbackPath.toString().trim().toLowerCase() in ["", "null", "false"]
-    def geneIdFallbackJson = geneIdFallbackDisabled ? "null" : groovy.json.JsonOutput.toJson(geneIdFallbackPath.toString())
+    def markerLookupJson = groovy.json.JsonOutput.toJson(reference_inputs.marker_lookup_path)
+    def precomputedStatsJson = groovy.json.JsonOutput.toJson(reference_inputs.precomputed_stats_path)
+    def geneMappingDbJson = groovy.json.JsonOutput.toJson(reference_inputs.gene_mapping_db_path)
+    def geneIdFallbackJson = groovy.json.JsonOutput.toJson(reference_inputs.gene_id_fallback_csv)
     def defaultRegionName = pipelineSpecies == "mouse" ? "region" : "frontal_a44_a45_a46_a32_acc"
     def regionNameJson = params.mapmycells_region_name == null ? groovy.json.JsonOutput.toJson(defaultRegionName) : groovy.json.JsonOutput.toJson(params.mapmycells_region_name.toString())
-    def defaultRegionCacheDir = file(params.outdir).toAbsolutePath().resolve("mapmycells_cache").toString()
-    def regionCacheDirJson = params.mapmycells_region_cache_dir == null ? groovy.json.JsonOutput.toJson(defaultRegionCacheDir) : groovy.json.JsonOutput.toJson(params.mapmycells_region_cache_dir.toString())
+    def regionCacheDirJson = groovy.json.JsonOutput.toJson(reference_inputs.region_cache_dir)
     def plotsOnly = params.mapmycells_plots_only == null ? false : params.mapmycells_plots_only.toString().trim().toLowerCase() == "true"
     def plotsOnlyJson = plotsOnly ? "true" : "false"
     def publishedMapMyCellsOut = "${params.outdir}/${pair_id}/${segmentation}/mapmycells/mapmycells_out"

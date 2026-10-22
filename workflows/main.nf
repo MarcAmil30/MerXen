@@ -18,13 +18,14 @@ include { ALIGN; MATERIALIZE_ALIGNMENT; ALIGN_QC } from "./modules/alignment"
 include { COMPARE } from "./modules/comparison"
 include { VISUALIZE } from "./modules/visualization"
 include { SPATIAL_GENE_ANALYSIS } from "./modules/spatial_gene_analysis"
-include { MECR_REFERENCE; MECR } from "./modules/mecr"
+include { MECR_REFERENCE; MECR; mecrReferenceInputs } from "./modules/mecr"
 include {
     CLUSTERING_SQUIDPY_PREPARE;
     CLUSTERING_SQUIDPY_COMPUTE;
-    CLUSTERING_SQUIDPY_FINALIZE
+    CLUSTERING_SQUIDPY_FINALIZE;
+    clusteringReferenceInputs
 } from "./modules/clustering_squidpy"
-include { MAPMYCELLS } from "./modules/mapmycells"
+include { MAPMYCELLS; mapMyCellsReferenceInputs } from "./modules/mapmycells"
 include {
     MENDER_PREPARE;
     MENDER_COMPUTE;
@@ -1086,18 +1087,39 @@ def annotationPathFields() {
     return ["pial_boundary_path", "wm_boundary_path", "side_boundary_path", "exclusion_path", "ribbon_path", "annotation_path"]
 }
 
-// Swap each set path field of config for the name it is staged under and
-// add the file to files, for a path(input_files, stageAs: "inputs/??/*")
-// input: the n-th file lands at inputs/<nn>/<name>, so names cannot collide.
+// Swap each set path field of config (or each entry of a list field) for the
+// name it is staged under and add the file to files, for a
+// path(input_files, stageAs: "inputs/??/*") input: the n-th file lands at
+// inputs/<nn>/<name>, so names cannot collide.
 def stageConfigFiles(config, fields, files) {
     fields.each { field ->
-        if (!isBlankPath(config[field])) {
-            def staged = file(config[field].toString())
-            files << staged
-            config[field] = String.format("inputs/%02d/%s", files.size(), staged.name)
+        def value = config[field]
+        if (value instanceof Collection) {
+            config[field] = value.findAll { item -> !isBlankPath(item) }.collect { item -> stagedInputName(item, files) }
+        } else if (!isBlankPath(value)) {
+            config[field] = stagedInputName(value, files)
         }
     }
     return config
+}
+
+def stagedInputName(rawPath, files) {
+    def staged = file(rawPath.toString())
+    files << staged
+    return String.format("inputs/%02d/%s", files.size(), staged.name)
+}
+
+// A module's reference inputs as [local names, files to stage]. The cache
+// directory is staged only if it already exists; otherwise the stage creates
+// it and downloads into it, so it keeps its absolute path.
+def stageReferenceInputs(inputs, cacheField) {
+    def staged = new LinkedHashMap(inputs)
+    def fields = staged.keySet().findAll { field ->
+        field != cacheField || (!isBlankPath(staged[field]) && file(staged[field].toString()).isDirectory())
+    }.toList()
+    def files = []
+    stageConfigFiles(staged, fields, files)
+    return [staged, files]
 }
 
 def corticalDepthAnnotationPath(row, platform, role) {
@@ -3015,7 +3037,11 @@ workflow {
                 : "whb"
             tuple(referenceAtlas, mergeMecrSamplesJson(samplesJsonValues))
         }
-    mecr_reference_results_ch = MECR_REFERENCE(mecr_reference_inputs_ch)
+    mecr_reference_files_ch = channel.value(stageReferenceInputs(
+        mecrReferenceInputs(normalizeSpecies(params.species) == "mouse" ? "wmb" : "whb"),
+        "reference_cache_dir",
+    ))
+    mecr_reference_results_ch = MECR_REFERENCE(mecr_reference_inputs_ch, mecr_reference_files_ch)
     mecr_inputs_ch = mecr_samples_ch
         .combine(mecr_reference_results_ch)
         .map { pairId, segmentation, samplesJson, referenceOut ->
@@ -3569,8 +3595,11 @@ workflow {
             .mix(clustering_after_visualize_ch)
             .mix(clustering_after_spatial_gene_analysis_ch)
 
-    clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(clustering_inputs_ch)
-    clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(clustering_prepared_ch)
+    clustering_reference_ch = channel.value(
+        stageReferenceInputs(clusteringReferenceInputs(), "reference_cache_dir")
+    )
+    clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(clustering_inputs_ch, clustering_reference_ch)
+    clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(clustering_prepared_ch, clustering_reference_ch)
     clustering_results_ch = CLUSTERING_SQUIDPY_FINALIZE(clustering_computed_ch)
 
     // Terminal analyses live in their own workflow because Nextflow stores
@@ -3912,7 +3941,10 @@ workflow TERMINAL_ANALYSES {
 
     mapmycells_inputs_ch = mapmycells_from_clustering_ch.mix(mapmycells_published_ch)
 
-    mapmycells_results_ch = MAPMYCELLS(mapmycells_inputs_ch)
+    mapmycells_reference_ch = channel.value(
+        stageReferenceInputs(mapMyCellsReferenceInputs(), "region_cache_dir")
+    )
+    mapmycells_results_ch = MAPMYCELLS(mapmycells_inputs_ch, mapmycells_reference_ch)
 
     // Reusable per-pair barrier for independent terminal analyses. Each event
     // is grouped with a known pair-specific cardinality, so no pair waits for
