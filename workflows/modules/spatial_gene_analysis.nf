@@ -7,7 +7,8 @@ process SPATIAL_GENE_ANALYSIS {
     tuple val(pair_id),
         val(segmentation),
         val(samples_json),
-        val(transcript_analysis_enabled)
+        val(transcript_analysis_enabled),
+        path(input_files, stageAs: "inputs/??/*")
 
     output:
     tuple val(pair_id),

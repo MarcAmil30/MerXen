@@ -8,7 +8,8 @@ process COMPUTE_CORTICAL_DEPTH {
         val(pair_id),
         val(platform),
         val(cortical_depth_config_json),
-        path(latest_zarr)
+        path(latest_zarr),
+        path(input_files, stageAs: "inputs/??/*")
 
     output:
     tuple val(key),
