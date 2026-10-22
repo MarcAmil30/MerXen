@@ -5267,12 +5267,16 @@ workflow {
         .map {
             key, pairId, platform, enrichedLatestZarr, registeredImagesCsv,
             registerPostXeniumIfNonrigid ->
+            def imageFiles = []
+            def images = registeredImageSpecs(registeredImagesCsv).collect { spec ->
+                stageConfigFiles(spec, ["image_path", "alignment_matrix_path"], imageFiles)
+            }
             def registerImagesConfig = [
                 dataset_name: "${pairId}_${platform}",
                 platform: platform,
                 latest_zarr_path: "latest_input.zarr",
                 output_dir: "register_images_out",
-                images: registeredImageSpecs(registeredImagesCsv),
+                images: images,
                 refine_affine: params.register_images_refine_affine,
                 nonrigid_enabled: registerPostXeniumIfNonrigid,
                 nonrigid_pixel_size_um: params.register_post_xenium_if_nonrigid_pixel_size_um,
@@ -5302,6 +5306,7 @@ workflow {
                 platform,
                 groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(registerImagesConfig)),
                 enrichedLatestZarr,
+                imageFiles,
             )
         }
 
