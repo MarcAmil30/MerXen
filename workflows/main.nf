@@ -2598,12 +2598,16 @@ workflow {
             }
         )
         .map { key, pairId, platform, enrichedLatestZarr, registeredImagesCsv ->
+            def imageFiles = []
+            def images = registeredImageSpecs(registeredImagesCsv).collect { spec ->
+                stageConfigFiles(spec, ["image_path", "alignment_matrix_path"], imageFiles)
+            }
             def registerImagesConfig = [
                 dataset_name: "${pairId}_${platform}",
                 platform: platform,
                 latest_zarr_path: "latest_input.zarr",
                 output_dir: "register_images_out",
-                images: registeredImageSpecs(registeredImagesCsv),
+                images: images,
                 refine_affine: params.register_images_refine_affine,
                 build_viewer_pyramid: params.viewer_cache_build_image_pyramid,
             ]
@@ -2614,6 +2618,7 @@ workflow {
                 platform,
                 groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(registerImagesConfig)),
                 enrichedLatestZarr,
+                imageFiles,
             )
         }
 

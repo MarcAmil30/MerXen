@@ -8,7 +8,8 @@ process REGISTER_IMAGES {
         val(pair_id),
         val(platform),
         val(register_images_config_json),
-        path(latest_zarr)
+        path(latest_zarr),
+        path(input_files, stageAs: "inputs/??/*")
 
     output:
     tuple val(key),
