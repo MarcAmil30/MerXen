@@ -4,7 +4,7 @@ process ENRICH {
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/enrichment" }, mode: "symlink", overwrite: true
 
     input:
-    tuple val(key), val(pair_id), val(platform), val(enrich_config_json), path(latest_zarr), path(mask_path), path(nuclei_mask_path)
+    tuple val(key), val(pair_id), val(platform), val(enrich_config_json), path(latest_zarr), path(mask_path), path(nuclei_mask_path), path(original_data, stageAs: "source_spatialdata.zarr")
 
     output:
     tuple val(key), val(pair_id), val(platform), path("latest_input.zarr"), path("enrich_out")

@@ -337,8 +337,6 @@ def segmentMetaForPlatform(row, platform, params) {
             channels: parseChannels(row.merscope_channels, ["DAPI", "PolyT"]),
             image_prefix: chooseField(row, ["merscope_image_prefix"]) ?: null,
             z_range: parseRange(row.merscope_z_range, 0, 6),
-            transform_path: chooseField(row, ["merscope_transform_path"]) ?: null,
-            xenium_spec_path: null,
             min_qv: null,
             voxel_layers: intOrDefault(
                 row.merscope_voxel_layers,
@@ -352,8 +350,6 @@ def segmentMetaForPlatform(row, platform, params) {
             channels: parseChannels(row.xenium_channels, ["DAPI", "18S"]),
             image_prefix: null,
             z_range: null,
-            transform_path: null,
-            xenium_spec_path: chooseField(row, ["xenium_spec_path"]) ?: null,
             min_qv: floatOrDefault(row.xenium_min_qv, params.xenium_min_qv),
             voxel_layers: intOrDefault(
                 row.xenium_voxel_layers,
@@ -2135,7 +2131,7 @@ workflow {
 
     build_results_ch = build_task_results_ch.mix(build_published_results_ch)
 
-    segment_meta_ch = sample_rows_ch.flatMap { pairId, row, settings ->
+    segment_meta_ch = sample_rows_ch.join(sample_files_ch).flatMap { pairId, row, settings, files ->
         if (!(settings.run_segment_nuclei || settings.run_segment)) {
             []
         } else {
@@ -2143,6 +2139,7 @@ workflow {
                 tuple(
                     "${pairId}|${platform}",
                     segmentMetaForPlatform(row, platform, params),
+                    files[platform].aux ?: [],
                     settings.run_segment_nuclei,
                     settings.run_segment,
                 )
@@ -2153,7 +2150,7 @@ workflow {
     segmentation_config_inputs_ch = build_results_ch
         .join(segment_meta_ch)
         .map {
-            key, pairId, platform, sourceSpatialdata, meta,
+            key, pairId, platform, sourceSpatialdata, meta, auxFile,
             runSegmentNuclei, runSegment ->
             def persistentLatestZarrPath = file(
                 publishedDatasetPath(
@@ -2294,7 +2291,7 @@ workflow {
                 dataset: [
                     name: "${pairId}_${platform}",
                     platform: platform,
-                    data_path: sourceSpatialdata.toString(),
+                    data_path: "source_spatialdata.zarr",
                     channels: meta.channels,
                     output_dir: "segment_out",
                     persistent_latest_zarr_path: persistentLatestZarrPath,
@@ -2306,8 +2303,8 @@ workflow {
                     persistent_nuclei_stitching_stats_path: persistentNucleiStitchingStatsPath,
                     image_prefix: meta.image_prefix,
                     z_range: meta.z_range,
-                    transform_path: meta.transform_path,
-                    xenium_spec_path: meta.xenium_spec_path,
+                    transform_path: platform == "MERSCOPE" && auxFile ? auxFile.name : null,
+                    xenium_spec_path: platform == "XENIUM" && auxFile ? auxFile.name : null,
                     min_qv: meta.min_qv,
                     proseg_overrides: [voxel_layers: meta.voxel_layers],
                 ],
@@ -2318,6 +2315,8 @@ workflow {
                 pairId,
                 platform,
                 groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(segmentConfig)),
+                sourceSpatialdata,
+                auxFile,
                 runSegmentNuclei,
                 runSegment,
             )
@@ -2325,38 +2324,38 @@ workflow {
 
     nuclei_segment_inputs_ch = segmentation_config_inputs_ch
         .filter {
-            _key, _pairId, _platform, _segmentConfigJson,
+            _key, _pairId, _platform, _segmentConfigJson, _sourceSpatialdata, _auxFile,
             runSegmentNuclei, _runSegment ->
                 runSegmentNuclei
         }
         .map {
-            key, pairId, platform, segmentConfigJson,
+            key, pairId, platform, segmentConfigJson, sourceSpatialdata, auxFile,
             _runSegmentNuclei, _runSegment ->
-                tuple(key, pairId, platform, segmentConfigJson)
+                tuple(key, pairId, platform, segmentConfigJson, sourceSpatialdata, auxFile)
         }
 
     cellpose_segment_inputs_ch = segmentation_config_inputs_ch
         .filter {
-            _key, _pairId, _platform, _segmentConfigJson,
+            _key, _pairId, _platform, _segmentConfigJson, _sourceSpatialdata, _auxFile,
             _runSegmentNuclei, runSegment ->
                 runSegment
         }
         .map {
-            key, pairId, platform, segmentConfigJson,
+            key, pairId, platform, segmentConfigJson, sourceSpatialdata, auxFile,
             _runSegmentNuclei, _runSegment ->
-                tuple(key, pairId, platform, segmentConfigJson)
+                tuple(key, pairId, platform, segmentConfigJson, sourceSpatialdata, auxFile)
         }
 
     nuclei_task_results_ch = CELLPOSE_NUCLEI_SEGMENT(nuclei_segment_inputs_ch)
 
     nuclei_published_results_ch = segmentation_config_inputs_ch
         .filter {
-            _key, _pairId, _platform, _segmentConfigJson,
+            _key, _pairId, _platform, _segmentConfigJson, _sourceSpatialdata, _auxFile,
             runSegmentNuclei, runSegment ->
                 runSegment && !runSegmentNuclei
         }
         .map {
-            key, pairId, platform, segmentConfigJson,
+            key, pairId, platform, segmentConfigJson, _sourceSpatialdata, _auxFile,
             _runSegmentNuclei, _runSegment ->
                 def nucleiMask = requireExistingPath(
                     publishedDatasetPath(
@@ -2453,7 +2452,7 @@ workflow {
     segment_results_ch = segment_task_results_ch.mix(segment_published_results_ch)
 
     metadata_ch = build_results_ch.map { key, pairId, platform, sourceSpatialdata ->
-        tuple(key, pairId, platform, sourceSpatialdata.toString())
+        tuple(key, pairId, platform, sourceSpatialdata)
     }
 
     enrich_gate_ch = sample_rows_ch.flatMap { pairId, _row, settings ->
@@ -2495,7 +2494,7 @@ workflow {
                 latest_zarr_path: "latest_input.zarr",
                 mask_path: "enrich_input_mask.npy",
                 nuclei_mask_path: "enrich_input_nuclei_mask.npy",
-                original_data_path: originalDataPath,
+                original_data_path: "source_spatialdata.zarr",
                 output_dir: "enrich_out",
                 persistent_output_path: persistentLatestZarrPath,
                 transform_path: null,
@@ -2509,6 +2508,7 @@ workflow {
                 latestZarr,
                 maskPath,
                 nucleiMaskPath,
+                originalDataPath,
             )
         }
 
@@ -2638,15 +2638,12 @@ workflow {
         }
     }
 
-    viewer_cache_transform_ch = sample_rows_ch.flatMap { pairId, row, settings ->
+    viewer_cache_transform_ch = sample_rows_ch.join(sample_files_ch).flatMap { pairId, _row, settings, files ->
         if (!settings.run_build_viewer_caches) {
             []
         } else {
             settings.active_platforms.collect { platform ->
-                def transformPath = platform == "MERSCOPE"
-                    ? chooseField(row, ["merscope_transform_path"])
-                    : chooseField(row, ["xenium_spec_path"])
-                tuple("${pairId}|${platform}", transformPath)
+                tuple("${pairId}|${platform}", files[platform].aux ?: [])
             }
         }
     }
@@ -2654,17 +2651,14 @@ workflow {
     viewer_cache_inputs_ch = post_registration_zarrs_ch
         .join(viewer_cache_gate_ch)
         .join(viewer_cache_transform_ch)
-        .map { key, pairId, platform, enrichedLatestZarr, _runFlag, transformPath ->
-            def resolvedTransform = (transformPath && transformPath.toString().trim())
-                ? file(transformPath).toAbsolutePath().toString()
-                : null
+        .map { key, pairId, platform, enrichedLatestZarr, _runFlag, transformFile ->
             def viewerCacheConfig = [
                 dataset_name: "${pairId}_${platform}",
                 platform: platform,
                 latest_zarr_path: "latest_input.zarr",
                 original_data_path: "latest_input.zarr",
                 output_dir: "viewer_cache_out",
-                transform_path: resolvedTransform,
+                transform_path: transformFile ? transformFile.name : null,
                 downsample: params.viewer_cache_downsample,
                 label_chunk_size: params.viewer_cache_label_chunk_size,
                 contour_width: params.viewer_cache_contour_width,
@@ -2678,6 +2672,7 @@ workflow {
                 platform,
                 groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(viewerCacheConfig)),
                 enrichedLatestZarr,
+                transformFile,
             )
         }
 

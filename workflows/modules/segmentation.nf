@@ -4,7 +4,8 @@ process CELLPOSE_SEGMENT {
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true
 
     input:
-    tuple val(key), val(pair_id), val(platform), val(seg_config_json)
+    // source zarr and transform/spec are staged; the config names them locally
+    tuple val(key), val(pair_id), val(platform), val(seg_config_json), path(source_zarr, stageAs: "source_spatialdata.zarr"), path(aux_input)
 
     output:
     tuple val(key), val(pair_id), val(platform), val(seg_config_json), path("segment_out/cellpose_masks_tiled.npy"), path("segment_out/cellpose_cellprobs_tiled.npy"), path("segment_out/transcripts_for_proseg.csv"), path("segment_out/cellpose_transforms.json"), path("segment_out/cellpose_stitching_stats.json")
@@ -33,7 +34,8 @@ process CELLPOSE_NUCLEI_SEGMENT {
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true
 
     input:
-    tuple val(key), val(pair_id), val(platform), val(seg_config_json)
+    // source zarr and transform/spec are staged; the config names them locally
+    tuple val(key), val(pair_id), val(platform), val(seg_config_json), path(source_zarr, stageAs: "source_spatialdata.zarr"), path(aux_input)
 
     output:
     tuple val(key), val(pair_id), val(platform), val(seg_config_json), path("segment_out/cellpose_nuclei_masks_tiled.npy"), path("segment_out/cellpose_nuclei_stitching_stats.json")
@@ -62,7 +64,7 @@ process PROSEG_SEGMENT {
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true
 
     input:
-    tuple val(key), val(pair_id), val(platform), val(seg_config_json), path(cellpose_mask), path(cellpose_cellprob), path(transcripts_csv), path(cellpose_transforms), path(_stitching_stats), path(nuclei_mask), path(_nuclei_stitching_stats), path(proseg_path_file)
+    tuple val(key), val(pair_id), val(platform), val(seg_config_json), path(source_zarr, stageAs: "source_spatialdata.zarr"), path(aux_input), path(cellpose_mask), path(cellpose_cellprob), path(transcripts_csv), path(cellpose_transforms), path(_stitching_stats), path(nuclei_mask), path(_nuclei_stitching_stats), path(proseg_path_file)
 
     output:
     tuple val(key), val(pair_id), val(platform), path("segment_out/proseg_base_latest.zarr"), path(cellpose_mask), path(transcripts_csv), path(nuclei_mask)
@@ -106,6 +108,10 @@ workflow SEGMENT {
 
     main:
     cellpose_results = CELLPOSE_SEGMENT(segment_inputs)
+    segment_files = segment_inputs.map {
+        key, _pair_id, _platform, _seg_config_json, source_zarr, aux_input ->
+            tuple(key, source_zarr, aux_input)
+    }
     combined_cellpose_results = cellpose_results
         .join(nuclei_results)
         .map {
@@ -131,17 +137,20 @@ workflow SEGMENT {
             )
         }
     proseg_inputs = combined_cellpose_results
+        .join(segment_files)
         .combine(proseg_path)
         .map {
             key, pair_id, platform, seg_config_json, cellpose_mask,
             cellpose_cellprob, transcripts_csv, cellpose_transforms, stitching_stats, nuclei_mask,
-            nuclei_stitching_stats,
+            nuclei_stitching_stats, source_zarr, aux_input,
             proseg_path_file ->
             tuple(
                 key,
                 pair_id,
                 platform,
                 seg_config_json,
+                source_zarr,
+                aux_input,
                 cellpose_mask,
                 cellpose_cellprob,
                 transcripts_csv,
