@@ -2198,62 +2198,6 @@ workflow {
         .map {
             key, pairId, platform, sourceSpatialdata, meta, auxFile,
             runSegmentNuclei, runSegment ->
-            def persistentLatestZarrPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "latest/latest_spatialdata.zarr",
-                )
-            ).toAbsolutePath().toString()
-            def persistentMaskPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "segmentation/cellpose_masks_tiled.npy",
-                )
-            ).toAbsolutePath().toString()
-            def persistentCellprobPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "segmentation/cellpose_cellprobs_tiled.npy",
-                )
-            ).toAbsolutePath().toString()
-            def persistentTranscriptsPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "segmentation/transcripts_for_proseg.csv",
-                )
-            ).toAbsolutePath().toString()
-            def persistentStitchingStatsPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "segmentation/cellpose_stitching_stats.json",
-                )
-            ).toAbsolutePath().toString()
-            def persistentNucleiMaskPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "segmentation/cellpose_nuclei_masks_tiled.npy",
-                )
-            ).toAbsolutePath().toString()
-            def persistentNucleiStitchingStatsPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "segmentation/cellpose_nuclei_stitching_stats.json",
-                )
-            ).toAbsolutePath().toString()
             def baseConfig = [
                 cellpose: [
                     model_type: params.cellpose_model_type,
@@ -2340,13 +2284,6 @@ workflow {
                     data_path: "source_spatialdata.zarr",
                     channels: meta.channels,
                     output_dir: "segment_out",
-                    persistent_latest_zarr_path: persistentLatestZarrPath,
-                    persistent_mask_path: persistentMaskPath,
-                    persistent_cellpose_cellprob_path: persistentCellprobPath,
-                    persistent_transcripts_path: persistentTranscriptsPath,
-                    persistent_cellpose_stitching_stats_path: persistentStitchingStatsPath,
-                    persistent_nuclei_mask_path: persistentNucleiMaskPath,
-                    persistent_nuclei_stitching_stats_path: persistentNucleiStitchingStatsPath,
                     image_prefix: meta.image_prefix,
                     z_range: meta.z_range,
                     transform_path: platform == "MERSCOPE" && auxFile ? auxFile.name : null,
