@@ -6,8 +6,8 @@ process COMPARE {
     input:
     tuple val(pair_id),
         val(segmentation),
-        val(merscope_zarr),
-        val(xenium_zarr),
+        path(merscope_zarr, stageAs: "merscope_latest.zarr"),
+        path(xenium_zarr, stageAs: "xenium_latest.zarr"),
         val(merscope_table_key),
         val(xenium_table_key)
 

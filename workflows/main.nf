@@ -1036,7 +1036,7 @@ def mecrSamplesUseAteraReference(samplesJson) {
 
 // One reference task over every MECR sample list of a channel (none when it is
 // empty): the atlas for the run's species and the merged sample JSON.
-def mecrReferenceInputs(samplesChannel) {
+def mecrReferenceInputs(samplesChannel, stageZarrs = false) {
     return samplesChannel
         .map { _pairId, _segmentation, samplesJson -> samplesJson }
         .collect()
@@ -1045,7 +1045,13 @@ def mecrReferenceInputs(samplesChannel) {
             def referenceAtlas = normalizeSpecies(params.species) == "mouse"
                 ? "wmb"
                 : "whb"
-            tuple(referenceAtlas, mergeMecrSamplesJson(samplesJsonValues))
+            def merged = mergeMecrSamplesJson(samplesJsonValues)
+            // Staged: the stores are inputs of the task, so nothing outside the
+            // task folder has to be visible. The ATERA reference streams them
+            // from their absolute paths instead.
+            stageZarrs
+                ? [referenceAtlas] + stageSampleZarrs(merged)
+                : tuple(referenceAtlas, merged)
         }
 }
 
@@ -1736,6 +1742,22 @@ def stagedInputName(rawPath, files) {
     def staged = file(rawPath.toString())
     files << staged
     return String.format("inputs/%02d/%s", files.size(), staged.name)
+}
+
+// [samples JSON, zarr stores to stage] for a reader that takes
+// path(sample_zarrs, stageAs: "zarrs/??/*"): each sample's zarr_path becomes
+// zarrs/<nn>/<name>, as stageConfigFiles does for inputs/.
+def stageSampleZarrs(samplesJson) {
+    def samples = new groovy.json.JsonSlurper().parseText(samplesJson.toString())
+    def zarrs = []
+    samples.each { sample ->
+        if (!isBlankPath(sample.zarr_path)) {
+            def staged = file(sample.zarr_path.toString())
+            zarrs << staged
+            sample.zarr_path = String.format("zarrs/%02d/%s", zarrs.size(), staged.name)
+        }
+    }
+    return [groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(samples)), zarrs]
 }
 
 // A module's reference inputs as [local names, files to stage]. The cache
@@ -5782,7 +5804,9 @@ workflow {
             atera: mecrSamplesUseAteraReference(samplesJson)
             standard: true
         }
-    mecr_reference_inputs_ch = mecrReferenceInputs(mecr_samples_by_reference_ch.standard)
+    mecr_reference_inputs_ch = mecrReferenceInputs(
+        mecr_samples_by_reference_ch.standard, true
+    )
     // The atlas files MECR_REFERENCE reads are staged, so nothing outside the
     // task folder has to be visible. MECR_REFERENCE_ATERA still resolves them
     // from params inside its script.
@@ -5802,7 +5826,7 @@ workflow {
     mecr_inputs_ch = mecr_samples_by_reference_ch.standard
         .combine(mecr_reference_results_ch)
         .map { pairId, segmentation, samplesJson, referenceOut ->
-            tuple(pairId, segmentation, samplesJson, referenceOut)
+            [pairId, segmentation] + stageSampleZarrs(samplesJson) + [referenceOut]
         }
         .mix(
             mecr_samples_by_reference_ch.atera
@@ -6226,7 +6250,11 @@ workflow {
 
     visualize_inputs_ch = visualize_without_compare_ch.mix(visualize_after_compare_ch)
 
-    visualize_results_ch = VISUALIZE(visualize_inputs_ch)
+    visualize_results_ch = VISUALIZE(
+        visualize_inputs_ch.map { pairId, segmentation, samplesJson ->
+            [pairId, segmentation] + stageSampleZarrs(samplesJson)
+        }
+    )
 
     visualize_done_ch = visualize_results_ch.map { pairId, segmentation, _visualizeOutDir ->
         tuple("${pairId}|${segmentation}", true)
@@ -6311,12 +6339,14 @@ workflow {
             transcriptAnalysisEnabled,
             row ->
             def annotated = spatialGeneSamplesJson(samplesJson, row)
+            def staged = stageSampleZarrs(annotated[0])
             tuple(
                 pairId,
                 segmentation,
-                annotated[0],
+                staged[0],
                 transcriptAnalysisEnabled,
                 annotated[1],
+                staged[1],
             )
         }
 
@@ -6403,10 +6433,9 @@ workflow {
             clustering_inputs_ch
                 .combine(sample_rows_ch, by: 0)
                 .map { pairId, segmentation, samplesJson, row, settings ->
-                    tuple(
-                        pairId,
-                        segmentation,
-                        AnnotationSettings.samplesJsonWithRowColumns(samplesJson, row, settings),
+                    // PREPARE opens the stores, so they are staged inputs
+                    [pairId, segmentation] + stageSampleZarrs(
+                        AnnotationSettings.samplesJsonWithRowColumns(samplesJson, row, settings)
                     )
                 },
             clustering_reference_ch,
@@ -6568,7 +6597,10 @@ workflow {
             )
     } else {
         clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(
-            clustering_inputs_ch, clustering_reference_ch
+            clustering_inputs_ch.map { pairId, segmentation, samplesJson ->
+                [pairId, segmentation] + stageSampleZarrs(samplesJson)
+            },
+            clustering_reference_ch,
         )
         clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(
             clustering_prepared_ch, clustering_reference_ch
@@ -7190,9 +7222,7 @@ workflow {
                         platform,
                         sampleId,
                         clusteredH5ad,
-                        java.nio.file.Paths.get(
-                            sample.zarr_path.toString()
-                        ).toRealPath().toString(),
+                        null,  // replaced below by the store after the clustered tables
                         settings,
                     )
                 }

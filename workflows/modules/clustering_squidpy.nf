@@ -22,7 +22,8 @@ process CLUSTERING_SQUIDPY_PREPARE {
     input:
     tuple val(pair_id),
         val(segmentation),
-        val(samples_json)
+        val(samples_json),
+        path(sample_zarrs, stageAs: "zarrs/??/*")
     // clusteringReferenceInputs() as staged by main.nf
     tuple val(reference_inputs), path(reference_files, stageAs: "inputs/??/*")
 
