@@ -2,6 +2,9 @@ process DISTANCE_FROM_OBJECT_ANNOTATE {
     tag "${pair_id}:${platform}"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/distance_from_object" }, mode: "symlink", overwrite: true
+    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
     tuple val(key),
@@ -9,7 +12,7 @@ process DISTANCE_FROM_OBJECT_ANNOTATE {
         val(platform),
         val(distance_segmentations),
         val(distance_config_json),
-        path(latest_zarr),
+        path(latest_zarr, stageAs: "upstream_latest.zarr"),
         path(object_annotations)
 
     output:
@@ -28,9 +31,8 @@ process DISTANCE_FROM_OBJECT_ANNOTATE {
     export MKL_NUM_THREADS="${task.cpus}"
     export NUMEXPR_NUM_THREADS="${task.cpus}"
 
-    if [[ ! -e latest_input.zarr ]]; then
-        ln -s ${latest_zarr} latest_input.zarr
-    fi
+    # own copy of the upstream store; see bin/merxen-link-copy
+    merxen-link-copy "${latest_zarr}" latest_input.zarr
     if [[ "${object_annotations}" != "object_annotations.geojson" ]]; then
         ln -s ${object_annotations} object_annotations.geojson
     fi

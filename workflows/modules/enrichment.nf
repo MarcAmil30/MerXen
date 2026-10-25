@@ -2,8 +2,7 @@ process ENRICH {
     tag "${pair_id}:${platform}"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/enrichment" }, mode: "symlink", overwrite: true
-    // latest/ links to the newest store in the chain; the stages after this
-    // one still add to it in place, so it is a link, not a copy.
+    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
         saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
 
