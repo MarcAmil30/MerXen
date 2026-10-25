@@ -1577,6 +1577,44 @@ def publishedPairPath(outdir, pairId, suffix) {
     return "${outdir}/${pairId}/${suffix}"
 }
 
+// While the run goes, each latest/latest_spatialdata.zarr is a symlink to the
+// newest store in the work folder. At the end, replace each with a hard-linked
+// copy of that store (bin/merxen-link-copy; a real copy across file systems),
+// so deleting work/ keeps it.
+def materializeLatestStores(outdir, linkCopyScript) {
+    def root = new File(outdir.toString())
+    if (outdir.toString().contains("://") || !root.isDirectory()) {
+        return
+    }
+    def links = []
+    root.eachDir { pairDir ->
+        pairDir.eachDir { platformDir ->
+            def link = new File(platformDir, "latest/latest_spatialdata.zarr").toPath()
+            if (java.nio.file.Files.isSymbolicLink(link)) {
+                links << link
+            }
+        }
+    }
+    links.each { link ->
+        def partial = link.resolveSibling(".latest_spatialdata.zarr.partial")
+        try {
+            def target = link.toRealPath()
+            ["rm", "-rf", partial.toString()].execute().waitFor()
+            def proc = ["bash", linkCopyScript.toString(), target.toString(), partial.toString()].execute()
+            proc.waitForProcessOutput(System.out, System.err)
+            if (proc.exitValue() != 0) {
+                throw new IllegalStateException("merxen-link-copy exited with ${proc.exitValue()}")
+            }
+            java.nio.file.Files.delete(link)
+            java.nio.file.Files.move(partial, link)
+        }
+        catch (Exception e) {
+            ["rm", "-rf", partial.toString()].execute().waitFor()
+            log.warn("Left ${link} as a symlink into the work folder: ${e.message}")
+        }
+    }
+}
+
 def rowFieldOrDefault(row, fieldName, fallback) {
     def value = chooseField(row, [fieldName])
     return value == null ? fallback : value
@@ -3590,6 +3628,12 @@ workflow {
         clustering_results_ch,
         clustered_zarrs_ch,
     )
+
+    def latestOutdir = params.outdir
+    def linkCopyScript = "${projectDir}/bin/merxen-link-copy"
+    workflow.onComplete {
+        materializeLatestStores(latestOutdir, linkCopyScript)
+    }
 }
 
 
