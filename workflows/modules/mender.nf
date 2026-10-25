@@ -208,9 +208,10 @@ process MENDER_IMPORT {
     // <segmentation>/mender/mender_out/<platform>/spatialdata_import_manifest.json
     publishDir { "${params.outdir}/${pair_id}" }, mode: "copy", overwrite: true,
         saveAs: { filename -> filename.startsWith("mender_publish/") ? filename.substring("mender_publish/".length()) : null }
-    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
-    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
+    // latest/.chain/<place in the chain>_<stage>: this stage's store; at the end
+    // of the run the highest one becomes latest/ (materializeLatestStores, main.nf)
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest/.chain" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "10_MENDER_IMPORT" : null }
 
     input:
     // one MENDER config and finalized folder per segmentation, in the same order

@@ -2,9 +2,10 @@ process VIEWER_CACHE {
     tag "${pair_id}:${platform}"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/viewer_cache" }, mode: "symlink", overwrite: true
-    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
-    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
+    // latest/.chain/<place in the chain>_<stage>: this stage's store; at the end
+    // of the run the highest one becomes latest/ (materializeLatestStores, main.nf)
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest/.chain" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "03_VIEWER_CACHE" : null }
 
     input:
     tuple val(key), val(pair_id), val(platform), val(viewer_cache_config_json), path(latest_zarr, stageAs: "upstream_latest.zarr"), path(transform_input)
