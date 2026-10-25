@@ -1,0 +1,580 @@
+{
+  "inputs": [
+    {
+      "name": "Samples",
+      "advanced": false,
+      "description": "One row per section: the MERSCOPE and/or Xenium export of the same tissue, with its annotations and per-section options.",
+      "params": {
+        "samplesheet": {
+          "name": "Sections",
+          "type": "csv",
+          "required": true,
+          "takes_samples": false,
+          "allow_custom_columns": true,
+          "columns": [
+            {
+              "name": "pair_id",
+              "type": "string",
+              "render": true,
+              "required": true
+            },
+            {
+              "name": "analysis_mode",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "paired",
+                "merscope",
+                "xenium"
+              ]
+            },
+            {
+              "name": "merscope_dir",
+              "type": "data",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "merscope_transform_path",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "pattern": "json|csv"
+            },
+            {
+              "name": "merscope_image_prefix",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "merscope_z_range",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "merscope_channels",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "merscope_voxel_layers",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "xenium_dir",
+              "type": "data",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "xenium_spec_path",
+              "type": "data",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "xenium_channels",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "xenium_min_qv",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "xenium_voxel_layers",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "xenium_registered_images_csv",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "pattern": "csv"
+            },
+            {
+              "name": "enable_alignment",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "true",
+                "false"
+              ]
+            },
+            {
+              "name": "analysis_segmentation",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "mecr_enabled",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "true",
+                "false"
+              ]
+            },
+            {
+              "name": "cortical_depth_enabled",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "true",
+                "false"
+              ]
+            },
+            {
+              "name": "merscope_cortical_depth_annotation_geojson",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "pattern": "geojson|json"
+            },
+            {
+              "name": "xenium_cortical_depth_annotation_geojson",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "pattern": "geojson|json"
+            },
+            {
+              "name": "distance_from_object_enabled",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "true",
+                "false"
+              ]
+            },
+            {
+              "name": "distance_from_object_segmentations",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "merscope_distance_object_annotation_geojson",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "pattern": "geojson|json"
+            },
+            {
+              "name": "xenium_distance_object_annotation_geojson",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "pattern": "geojson|json"
+            },
+            {
+              "name": "mender_enabled",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "true",
+                "false"
+              ]
+            },
+            {
+              "name": "mender_segmentations",
+              "type": "string",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "start_stage",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "build_spatialdata",
+                "segment_nuclei",
+                "segment",
+                "enrich",
+                "register_images",
+                "build_viewer_caches",
+                "mask_image_quantification",
+                "qc",
+                "mecr",
+                "align",
+                "align_qc",
+                "compare",
+                "visualize",
+                "spatial_gene_analysis",
+                "clustering_squidpy",
+                "compute_cortical_depth",
+                "distance_from_object",
+                "mapmycells",
+                "mender"
+              ]
+            },
+            {
+              "name": "stop_stage",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "build_spatialdata",
+                "segment_nuclei",
+                "segment",
+                "enrich",
+                "register_images",
+                "build_viewer_caches",
+                "mask_image_quantification",
+                "qc",
+                "mecr",
+                "align",
+                "align_qc",
+                "compare",
+                "visualize",
+                "spatial_gene_analysis",
+                "clustering_squidpy",
+                "compute_cortical_depth",
+                "distance_from_object",
+                "mapmycells",
+                "mender"
+              ]
+            },
+            {
+              "name": "only_stage",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "build_spatialdata",
+                "segment_nuclei",
+                "segment",
+                "enrich",
+                "register_images",
+                "build_viewer_caches",
+                "mask_image_quantification",
+                "qc",
+                "mecr",
+                "align",
+                "align_qc",
+                "compare",
+                "visualize",
+                "spatial_gene_analysis",
+                "clustering_squidpy",
+                "compute_cortical_depth",
+                "distance_from_object",
+                "mapmycells",
+                "mender"
+              ]
+            }
+          ],
+          "description": "Each row is one tissue section (pair_id). merscope_dir and xenium_dir are the raw vendor exports. Blank options fall back to the pipeline settings below. Column meanings are in workflows/assets/schema_input.json and workflows/samplesheet.example.csv."
+        }
+      }
+    },
+    {
+      "name": "Pipeline options",
+      "advanced": false,
+      "description": "Main settings for every section in the run.",
+      "params": {
+        "species": {
+          "name": "Species",
+          "type": "string",
+          "valid": [
+            "human",
+            "mouse"
+          ],
+          "default": "human",
+          "required": true,
+          "description": "Selects the Allen reference atlas (human WHB or mouse WMB)."
+        },
+        "analysis_segmentation": {
+          "name": "Segmentations to analyse",
+          "type": "string",
+          "default": "all",
+          "required": false,
+          "description": "Which cell boundaries the analyses use: all, reseg, original_seg, proseg_mask or proseg_hybrid (comma-separated)."
+        },
+        "start_stage": {
+          "name": "First stage",
+          "type": "string",
+          "valid": [
+            "build_spatialdata",
+            "segment_nuclei",
+            "segment",
+            "enrich",
+            "register_images",
+            "build_viewer_caches",
+            "mask_image_quantification",
+            "qc",
+            "mecr",
+            "align",
+            "align_qc",
+            "compare",
+            "visualize",
+            "spatial_gene_analysis",
+            "clustering_squidpy",
+            "compute_cortical_depth",
+            "distance_from_object",
+            "mapmycells",
+            "mender"
+          ],
+          "default": "build_spatialdata",
+          "required": false,
+          "description": "Stage to start from, unless a section row sets its own."
+        },
+        "stop_stage": {
+          "name": "Last stage",
+          "type": "string",
+          "valid": [
+            "build_spatialdata",
+            "segment_nuclei",
+            "segment",
+            "enrich",
+            "register_images",
+            "build_viewer_caches",
+            "mask_image_quantification",
+            "qc",
+            "mecr",
+            "align",
+            "align_qc",
+            "compare",
+            "visualize",
+            "spatial_gene_analysis",
+            "clustering_squidpy",
+            "compute_cortical_depth",
+            "distance_from_object",
+            "mapmycells",
+            "mender"
+          ],
+          "default": "clustering_squidpy",
+          "required": false,
+          "description": "Stage to stop after, unless a section row sets its own."
+        },
+        "enable_alignment": {
+          "name": "Align paired sections",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "Register the MERSCOPE and Xenium sections into one coordinate frame (VALIS)."
+        },
+        "cellpose_gpu": {
+          "name": "Cellpose on GPU",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "Run Cellpose segmentation on a GPU."
+        },
+        "cellpose_model_type": {
+          "name": "Cellpose model",
+          "type": "string",
+          "default": "cyto3",
+          "required": false,
+          "description": "Cellpose model for cell segmentation."
+        },
+        "clustering_squidpy_use_gpu": {
+          "name": "Clustering on GPU",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "Run clustering with RAPIDS on a GPU (merxen-clustering-gpu image)."
+        },
+        "max_ram_gb": {
+          "name": "Memory limit (GB)",
+          "type": "number",
+          "required": false,
+          "description": "Memory budget used to tile Cellpose and size other stages."
+        }
+      }
+    },
+    {
+      "name": "Reference data",
+      "advanced": false,
+      "description": "Allen Brain Cell atlas files (about 47 GB for human WHB), used by MECR, clustering and MapMyCells.",
+      "params": {
+        "mecr_whb_neurons_h5ad_path": {
+          "name": "WHB neurons expression",
+          "type": "data",
+          "pattern": "h5ad",
+          "required": false,
+          "description": "WHB-10Xv3-Neurons-raw.h5ad (MECR)."
+        },
+        "mecr_whb_nonneurons_h5ad_path": {
+          "name": "WHB non-neurons expression",
+          "type": "data",
+          "pattern": "h5ad",
+          "required": false,
+          "description": "WHB-10Xv3-Nonneurons-raw.h5ad (MECR)."
+        },
+        "mecr_whb_cell_metadata_path": {
+          "name": "WHB cell metadata",
+          "type": "data",
+          "pattern": "csv",
+          "required": false,
+          "description": "WHB-10Xv3 cell_metadata.csv (MECR)."
+        },
+        "mecr_whb_taxonomy_metadata_path": {
+          "name": "WHB taxonomy terms (MECR)",
+          "type": "data",
+          "pattern": "csv",
+          "required": false,
+          "description": "WHB-taxonomy cluster_annotation_term.csv."
+        },
+        "mecr_whb_cluster_membership_path": {
+          "name": "WHB cluster membership (MECR)",
+          "type": "data",
+          "pattern": "csv",
+          "required": false,
+          "description": "WHB-taxonomy cluster_to_cluster_annotation_membership.csv."
+        },
+        "clustering_squidpy_whb_marker_lookup_path": {
+          "name": "Marker lookup (clustering)",
+          "type": "data",
+          "pattern": "json",
+          "required": false,
+          "description": "query_markers JSON for broad cell classes."
+        },
+        "clustering_squidpy_whb_taxonomy_metadata_path": {
+          "name": "WHB taxonomy terms (clustering)",
+          "type": "data",
+          "pattern": "csv",
+          "required": false,
+          "description": "WHB-taxonomy cluster_annotation_term.csv."
+        },
+        "clustering_squidpy_whb_cluster_membership_path": {
+          "name": "WHB cluster membership (clustering)",
+          "type": "data",
+          "pattern": "csv",
+          "required": false,
+          "description": "WHB-taxonomy cluster_to_cluster_annotation_membership.csv."
+        },
+        "mapmycells_whb_marker_lookup_path": {
+          "name": "Marker lookup (MapMyCells)",
+          "type": "data",
+          "pattern": "json",
+          "required": false,
+          "description": "query_markers JSON for MapMyCells."
+        },
+        "mapmycells_whb_precomputed_stats_path": {
+          "name": "Precomputed stats (MapMyCells)",
+          "type": "data",
+          "pattern": "h5",
+          "required": false,
+          "description": "precomputed_stats .h5 for MapMyCells."
+        },
+        "annotation_gene_id_fallback_csv": {
+          "name": "Gene ID table",
+          "type": "data",
+          "pattern": "csv",
+          "required": false,
+          "description": "WHB-10Xv3 gene.csv, used to map gene symbols to Ensembl IDs."
+        }
+      }
+    },
+    {
+      "name": "Container images",
+      "advanced": true,
+      "description": "Where the four MerXen images are pulled from (docs/containers.md).",
+      "params": {
+        "container_registry": {
+          "name": "Registry",
+          "type": "string",
+          "default": "ghcr.io/bourdenxlab",
+          "required": false,
+          "description": "Images are <registry>/<image>:<tag>."
+        },
+        "container_tag": {
+          "name": "Tag",
+          "type": "string",
+          "default": "0.1.0",
+          "required": false,
+          "description": "Image tag."
+        }
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "Platform comparison tables",
+      "process": "COMPARE",
+      "pattern": "_compare\\.csv$",
+      "description": "Per-gene counts on MERSCOPE against Xenium, raw and normalised."
+    },
+    {
+      "name": "Platform comparison metrics",
+      "process": "COMPARE",
+      "pattern": "_comparison_metrics\\.json$",
+      "description": "Summary of how well the two platforms agree."
+    },
+    {
+      "name": "Clustered cells",
+      "process": "CLUSTERING_SQUIDPY_FINALIZE",
+      "pattern": "_clustered\\.h5ad$",
+      "description": "AnnData with clusters and UMAP, one per platform and segmentation."
+    },
+    {
+      "name": "Cell types",
+      "process": "TERMINAL_ANALYSES:MAPMYCELLS",
+      "pattern": "_mapmycells\\.csv$",
+      "description": "Allen cell type and confidence for every cell."
+    },
+    {
+      "name": "Cell types (AnnData)",
+      "process": "TERMINAL_ANALYSES:MAPMYCELLS",
+      "pattern": "_mapmycells_annotated\\.h5ad$",
+      "description": "Clustered AnnData annotated with MapMyCells cell types."
+    },
+    {
+      "name": "Spatial domains",
+      "process": "TERMINAL_ANALYSES:MENDER_FINALIZE",
+      "pattern": "_mender_annotated\\.h5ad$",
+      "description": "AnnData with each cell's MENDER spatial domain."
+    },
+    {
+      "name": "MECR summary",
+      "process": "MECR",
+      "pattern": "_mecr_summary\\.csv$",
+      "description": "Mutually exclusive co-expression rate: a segmentation error measure."
+    },
+    {
+      "name": "Spatial gene autocorrelation",
+      "process": "SPATIAL_GENE_ANALYSIS",
+      "pattern": "_spatial_gene_autocorrelation\\.csv$",
+      "description": "Genes whose positions are more clustered or spread than chance."
+    },
+    {
+      "name": "Figures",
+      "process": "VISUALIZE",
+      "filetype": "pdf",
+      "description": "Per-segmentation figures for both platforms."
+    },
+    {
+      "name": "Alignment transform",
+      "process": "ALIGN",
+      "pattern": "alignment_transform\\.json$",
+      "description": "Transform from the moving to the fixed section."
+    }
+  ]
+}
