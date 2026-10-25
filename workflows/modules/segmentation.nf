@@ -1,7 +1,9 @@
 process CELLPOSE_SEGMENT {
     tag "${pair_id}:${platform}"
 
-    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true
+    // the seeding sidecar was only ever published beside the CSV in segmentation/
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "segment_out/transcripts_for_proseg.transforms.json" ? null : filename }
     // Also hard-link the outputs into segmentation/ itself, where SEGMENT used to
     // write them directly and where restarts from published results look.
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "link", overwrite: true,
