@@ -2,12 +2,13 @@ process MENDER_PREPARE {
     tag "${pair_id}:${platform}:${segmentation}"
 
     input:
+    // the store is only read here; MENDER_IMPORT writes to its own copy
     tuple val(task_key),
         val(pair_id),
         val(segmentation),
         val(platform),
         val(sample_id),
-        val(spatialdata_path),
+        path(spatialdata_path, stageAs: "spatialdata.zarr"),
         val(source_spatialdata_table),
         val(native_shape_key),
         val(source_h5ad_path),
@@ -36,7 +37,7 @@ process MENDER_PREPARE {
     def clusteringModeJson = groovy.json.JsonOutput.toJson(params.mender_clustering_mode.toString())
     def sourceTableJson = groovy.json.JsonOutput.toJson(source_spatialdata_table.toString())
     def nativeShapeJson = groovy.json.JsonOutput.toJson(native_shape_key.toString())
-    def spatialdataPathJson = groovy.json.JsonOutput.toJson(spatialdata_path.toString())
+    def spatialdataPathJson = groovy.json.JsonOutput.toJson("spatialdata.zarr")
     def sourceH5adJson = groovy.json.JsonOutput.toJson(clustered_h5ad.toString())
     def sourceH5adOriginJson = groovy.json.JsonOutput.toJson(source_h5ad_path.toString())
     """
@@ -186,33 +187,35 @@ process MENDER_FINALIZE {
 }
 
 process MENDER_IMPORT {
-    tag "${pair_id}:${platform}:${segmentation}"
+    tag "${pair_id}:${platform}"
 
-    publishDir {
-        "${params.outdir}/${pair_id}/${segmentation}/mender/mender_out/${platform.toLowerCase()}"
-    }, mode: "copy", overwrite: true
+    // manifests land where the per-segmentation import used to publish them:
+    // <segmentation>/mender/mender_out/<platform>/spatialdata_import_manifest.json
+    publishDir { "${params.outdir}/${pair_id}" }, mode: "copy", overwrite: true,
+        saveAs: { filename -> filename.startsWith("mender_publish/") ? filename.substring("mender_publish/".length()) : null }
+    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
-    tuple val(task_key),
+    // one MENDER config and finalized folder per segmentation, in the same order
+    tuple val(key),
         val(pair_id),
-        val(segmentation),
         val(platform),
-        val(sample_id),
-        val(spatialdata_path),
-        val(source_spatialdata_table),
-        val(native_shape_key),
-        val(source_h5ad_path),
-        path(mender_config),
-        path(finalized_dir)
+        path(latest_zarr, stageAs: "upstream_latest.zarr"),
+        val(segmentations),
+        path(mender_configs, stageAs: "configs/??/*"),
+        path(finalized_dirs, stageAs: "finalized/??/*")
 
     output:
-    tuple val(task_key),
-        val(pair_id),
-        val(segmentation),
-        val(platform),
-        path("spatialdata_import_manifest.json")
+    tuple val(key), val(pair_id), val(platform), path("latest_input.zarr"), path("mender_publish")
 
     script:
+    def jobsJson = groovy.json.JsonOutput.toJson(
+        [segmentations, mender_configs, finalized_dirs]
+            .collect { value -> (value instanceof List ? value : [value]).collect { item -> item.toString() } }
+            .transpose()
+    )
     """
     set -euo pipefail
     export PYTHONPATH="${projectDir}/../src:\${PYTHONPATH:-}"
@@ -222,9 +225,28 @@ process MENDER_IMPORT {
     export NUMEXPR_NUM_THREADS="${task.cpus}"
     export NUMBA_NUM_THREADS="${task.cpus}"
 
-    python -m merxen.mender_stages import \
-        --config "${mender_config}" \
-        --finalized-dir "${finalized_dir}" \
-        --output-dir .
+    # own copy of the upstream store; see bin/merxen-link-copy
+    merxen-link-copy "${latest_zarr}" latest_input.zarr
+
+    python - <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+for segmentation, config_path, finalized_dir in json.loads('''${jobsJson}'''):
+    config = json.loads(Path(config_path).read_text())
+    config["spatialdata_path"] = "latest_input.zarr"
+    local_config = Path("import_configs") / f"{segmentation}.json"
+    local_config.parent.mkdir(exist_ok=True)
+    local_config.write_text(json.dumps(config, indent=2))
+    out_dir = Path("mender_publish") / segmentation / "mender" / "mender_out" / "${platform.toLowerCase()}"
+    subprocess.run(
+        [sys.executable, "-m", "merxen.mender_stages", "import",
+         "--config", str(local_config), "--finalized-dir", finalized_dir,
+         "--output-dir", str(out_dir)],
+        check=True,
+    )
+PY
     """
 }

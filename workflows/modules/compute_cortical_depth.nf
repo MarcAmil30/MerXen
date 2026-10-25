@@ -2,13 +2,16 @@ process COMPUTE_CORTICAL_DEPTH {
     tag "${pair_id}:${platform}"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/compute_cortical_depth" }, mode: "symlink", overwrite: true
+    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
     tuple val(key),
         val(pair_id),
         val(platform),
         val(cortical_depth_config_json),
-        path(latest_zarr),
+        path(latest_zarr, stageAs: "upstream_latest.zarr"),
         path(input_files, stageAs: "inputs/??/*")
 
     output:
@@ -33,9 +36,8 @@ process COMPUTE_CORTICAL_DEPTH {
     export DASK_NUM_WORKERS="${task.cpus}"
     export MERXEN_CORTICAL_DEPTH_WORKERS="${task.cpus}"
 
-    if [[ ! -e latest_input.zarr ]]; then
-        ln -s ${latest_zarr} latest_input.zarr
-    fi
+    # own copy of the upstream store; see bin/merxen-link-copy
+    merxen-link-copy "${latest_zarr}" latest_input.zarr
 
     cat > cortical_depth_config.json <<'JSON'
 ${cortical_depth_config_json}

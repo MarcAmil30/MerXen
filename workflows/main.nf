@@ -23,6 +23,7 @@ include {
     CLUSTERING_SQUIDPY_PREPARE;
     CLUSTERING_SQUIDPY_COMPUTE;
     CLUSTERING_SQUIDPY_FINALIZE;
+    CLUSTERING_SQUIDPY_IMPORT;
     clusteringReferenceInputs
 } from "./modules/clustering_squidpy"
 include { MAPMYCELLS; mapMyCellsReferenceInputs } from "./modules/mapmycells"
@@ -3080,8 +3081,8 @@ workflow {
         .map { pairId, merscopePath, xeniumPath, alignOut, _materializationSummary ->
             tuple(
                 pairId,
-                merscopePath,
-                xeniumPath,
+                merscopePath.toString(),
+                xeniumPath.toString(),
                 alignOut.resolve("alignment_transform.json"),
                 alignOut.resolve("alignment_coords"),
                 alignOut,
@@ -3231,10 +3232,26 @@ workflow {
                 )
         }
         .join(alignment_done_branch_ch)
+        // read the aligned stores: alignment writes into its own copies, so the
+        // QC-stage stores do not have the aligned elements
         .map {
-            _branchKey, pairId, segmentation, merscopePath, xeniumPath,
+            _branchKey, pairId, segmentation, _qcMerscopePath, _qcXeniumPath,
             merscopeTableKey, merscopeShapeKey, xeniumTableKey,
             xeniumShapeKey, settings, _doneFlag ->
+                tuple(
+                    pairId, segmentation, merscopeTableKey, merscopeShapeKey,
+                    xeniumTableKey, xeniumShapeKey, settings,
+                )
+        }
+        .combine(
+            alignment_results_ch.map { pairId, merscopeLatest, xeniumLatest, _t, _c, _o ->
+                tuple(pairId, merscopeLatest, xeniumLatest)
+            },
+            by: 0,
+        )
+        .map {
+            pairId, segmentation, merscopeTableKey, merscopeShapeKey,
+            xeniumTableKey, xeniumShapeKey, settings, merscopePath, xeniumPath ->
                 tuple(
                     pairId,
                     segmentation,
@@ -3529,14 +3546,106 @@ workflow {
     clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(clustering_prepared_ch, clustering_reference_ch)
     clustering_results_ch = CLUSTERING_SQUIDPY_FINALIZE(clustering_computed_ch)
 
+    // Each store is one stage's own copy, so the terminal analyses must start
+    // from the newest one: after alignment, then after the clustered tables.
+    clustered_zarrs_ch = CLUSTERING_TABLES(
+        sample_rows_ch,
+        downstream_zarrs_ch,
+        alignment_results_ch,
+        clustering_results_ch,
+    )
+
     // Terminal analyses live in their own workflow because Nextflow stores
     // each workflow body as a single JVM string constant, which is capped at
     // 65535 characters. The combined body exceeded that limit.
     TERMINAL_ANALYSES(
         sample_rows_ch,
         clustering_results_ch,
-        downstream_zarrs_ch,
+        clustered_zarrs_ch,
     )
+}
+
+
+// Per platform, the store the terminal analyses start from. Alignment and the
+// clustered tables each write into their own copy (bin/merxen-link-copy), so
+// this follows the chain: mask quantification -> alignment, when the pair is
+// aligned -> CLUSTERING_SQUIDPY_IMPORT, when clustered tables are written.
+// The import runs once per platform for every segmentation, so the
+// segmentations never write one store side by side.
+workflow CLUSTERING_TABLES {
+    take:
+    sample_rows_ch
+    downstream_zarrs_ch    // key, pairId, platform, mask-quantification store
+    alignment_results_ch   // pairId, MERSCOPE store, Xenium store, transform, coords, align_out
+    clustering_results_ch  // pairId, segmentation, samplesJson, clustering_squidpy_out
+
+    main:
+    pair_settings_ch = sample_rows_ch.map { pairId, _row, settings -> tuple(pairId, settings) }
+
+    aligned_zarrs_ch = alignment_results_ch
+        .map { pairId, merscopeLatest, xeniumLatest, _t, _c, _o ->
+            tuple(pairId, merscopeLatest, xeniumLatest)
+        }
+        .combine(pair_settings_ch, by: 0)
+        .filter { _pairId, _m, _x, settings -> settings.need_alignment_results }
+        .flatMap { pairId, merscopeLatest, xeniumLatest, _settings ->
+            [
+                tuple("${pairId}|MERSCOPE", pairId, "MERSCOPE", merscopeLatest.toString()),
+                tuple("${pairId}|XENIUM", pairId, "XENIUM", xeniumLatest.toString()),
+            ]
+        }
+
+    unaligned_zarrs_ch = downstream_zarrs_ch
+        .map { key, pairId, platform, zarr -> tuple(pairId, key, platform, zarr) }
+        .combine(pair_settings_ch, by: 0)
+        .filter { _pairId, _key, _platform, _zarr, settings -> !settings.need_alignment_results }
+        .map { pairId, key, platform, zarr, _settings -> tuple(key, pairId, platform, zarr) }
+
+    post_align_zarrs_ch = aligned_zarrs_ch.mix(unaligned_zarrs_ch)
+
+    // one group per pair, holding every segmentation's clustering output
+    clustering_groups_ch = clustering_results_ch
+        .combine(pair_settings_ch, by: 0)
+        .filter { _pairId, _seg, _samplesJson, _outDir, _settings ->
+            params.clustering_squidpy_write_spatialdata_table
+        }
+        .map { pairId, segmentation, samplesJson, outDir, settings ->
+            tuple(
+                groupKey(pairId, settings.analysis_input_segmentations.size()),
+                segmentation,
+                samplesJson,
+                outDir,
+            )
+        }
+        .groupTuple(remainder: true)
+        .flatMap { pairKey, segmentations, samplesJsons, outDirs ->
+            def pairId = pairKey.getGroupTarget().toString()
+            def samples = new groovy.json.JsonSlurper().parseText(samplesJsons[0].toString())
+            samples.collect { sample ->
+                def platform = sample.platform.toString()
+                def h5ads = outDirs.collect { outDir ->
+                    java.nio.file.Paths.get(outDir.toString())
+                        .resolve(platform.toLowerCase())
+                        .resolve("${sample.sample_id}_clustered.h5ad")
+                }
+                tuple("${pairId}|${platform}", segmentations, h5ads)
+            }
+        }
+
+    // key, pairId, platform, store, segmentations, H5ADs
+    imported_zarrs_ch = CLUSTERING_SQUIDPY_IMPORT(post_align_zarrs_ch.join(clustering_groups_ch))
+        .map { key, pairId, platform, zarr -> tuple(key, pairId, platform, zarr.toString()) }
+
+    not_imported_zarrs_ch = post_align_zarrs_ch
+        .map { key, pairId, platform, zarr -> tuple(pairId, key, platform, zarr) }
+        .combine(pair_settings_ch, by: 0)
+        .filter { _pairId, _key, _platform, _zarr, settings ->
+            !(settings.run_clustering_squidpy && params.clustering_squidpy_write_spatialdata_table)
+        }
+        .map { pairId, key, platform, zarr, _settings -> tuple(key, pairId, platform, zarr) }
+
+    emit:
+    imported_zarrs_ch.mix(not_imported_zarrs_ch)
 }
 
 
@@ -3544,9 +3653,11 @@ workflow TERMINAL_ANALYSES {
     take:
     sample_rows_ch
     clustering_results_ch
-    downstream_zarrs_ch
+    downstream_zarrs_ch    // per platform, the newest store (CLUSTERING_TABLES)
 
     main:
+    pair_settings_ch = sample_rows_ch.map { pairId, _row, settings -> tuple(pairId, settings) }
+
     // Cortical depth runs after clustering so the per-cell broad_class and
     // subcluster_label annotations exist and its depth violin plots can be
     // produced. The distance-from-object branch consumes its tissue-region
@@ -3976,7 +4087,7 @@ workflow TERMINAL_ANALYSES {
             }
     }
 
-    mender_current_artifacts_ch = clustering_results_ch
+    mender_clustered_artifacts_ch = clustering_results_ch
         .map { pairId, segmentation, samplesJson, clusteringOutDir ->
             tuple(
                 "${pairId}|${segmentation}",
@@ -4018,6 +4129,27 @@ workflow TERMINAL_ANALYSES {
                         settings,
                     )
                 }
+        }
+
+    // MENDER reads the clustered table, which is in the store after the
+    // clustered tables were imported, not in the store clustering read
+    mender_current_artifacts_ch = mender_clustered_artifacts_ch
+        .map {
+            pairId, taskKey, segmentation, platform, sampleId, clusteredH5ad,
+            _clusteringZarr, settings ->
+                tuple(
+                    "${pairId}|${platform}", pairId, taskKey, segmentation,
+                    platform, sampleId, clusteredH5ad, settings,
+                )
+        }
+        .combine(downstream_zarrs_ch.map { key, _pairId, _platform, zarr -> tuple(key, zarr) }, by: 0)
+        .map {
+            _key, pairId, taskKey, segmentation, platform, sampleId, clusteredH5ad,
+            settings, zarr ->
+                tuple(
+                    pairId, taskKey, segmentation, platform, sampleId,
+                    clusteredH5ad, zarr.toString(), settings,
+                )
         }
 
     mender_published_artifacts_ch = sample_rows_ch.flatMap {
@@ -4175,5 +4307,73 @@ workflow TERMINAL_ANALYSES {
                 )
         }
     mender_finalized_ch = MENDER_FINALIZE(mender_finalize_inputs_ch)
-    MENDER_IMPORT(mender_finalized_ch)
+
+    // The newest store per platform once cortical depth and distance from
+    // object (each on its own copy) are done; MENDER imports into a copy of it.
+    post_terminal_zarrs_ch = distance_from_object_annotation_results_ch
+        .map { key, pairId, platform, _segmentations, zarr, _outDir ->
+            tuple(key, pairId, platform, zarr.toString())
+        }
+        .mix(
+            compute_cortical_depth_results_ch
+                .map { key, pairId, platform, zarr, _outDir -> tuple(pairId, key, platform, zarr) }
+                .combine(pair_settings_ch, by: 0)
+                .filter { _p, _k, _pl, _z, settings -> !settings.run_distance_from_object }
+                .map { pairId, key, platform, zarr, _s -> tuple(key, pairId, platform, zarr.toString()) }
+        )
+        .mix(
+            downstream_zarrs_ch
+                .map { key, pairId, platform, zarr -> tuple(pairId, key, platform, zarr) }
+                .combine(pair_settings_ch, by: 0)
+                .filter { _p, _k, _pl, _z, settings ->
+                    !settings.run_compute_cortical_depth && !settings.run_distance_from_object
+                }
+                .map { pairId, key, platform, zarr, _s -> tuple(key, pairId, platform, zarr.toString()) }
+        )
+
+    // one import per platform for every MENDER segmentation, in turn, so the
+    // segmentations never write one store side by side
+    mender_import_groups_ch = mender_finalized_ch
+        .map {
+            _taskKey, pairId, segmentation, platform, _sampleId, _spatialdataPath,
+            _sourceTable, _shapeKey, _sourceH5ad, menderConfig, finalizedDir ->
+                tuple(pairId, platform, segmentation, menderConfig, finalizedDir)
+        }
+        .combine(pair_settings_ch, by: 0)
+        .map { pairId, platform, segmentation, menderConfig, finalizedDir, settings ->
+            tuple(
+                groupKey("${pairId}|${platform}", settings.mender_segmentations.size()),
+                pairId, platform, segmentation, menderConfig, finalizedDir,
+                settings.mender_published_output_mode,
+            )
+        }
+        .groupTuple(remainder: true)
+        .map { key, pairIds, platforms, segmentations, configs, finalizedDirs, publishedModes ->
+            tuple(
+                key.getGroupTarget().toString(), pairIds[0], platforms[0], segmentations,
+                configs, finalizedDirs, publishedModes[0],
+            )
+        }
+
+    // this run's chain, or, when MENDER restarts from published results, the
+    // published latest zarr (the one MENDER_PREPARE read)
+    mender_import_current_ch = mender_import_groups_ch
+        .filter { _k, _p, _pl, _s, _c, _f, publishedMode -> !publishedMode }
+        .map { key, pairId, platform, segmentations, configs, finalizedDirs, _m ->
+            tuple(key, pairId, platform, segmentations, configs, finalizedDirs)
+        }
+        .join(post_terminal_zarrs_ch.map { key, _pairId, _platform, zarr -> tuple(key, zarr) })
+        .map { key, pairId, platform, segmentations, configs, finalizedDirs, zarr ->
+            tuple(key, pairId, platform, zarr, segmentations, configs, finalizedDirs)
+        }
+    mender_import_published_ch = mender_import_groups_ch
+        .filter { _k, _p, _pl, _s, _c, _f, publishedMode -> publishedMode }
+        .map { key, pairId, platform, segmentations, configs, finalizedDirs, _m ->
+            def latestZarr = normalizedPath(
+                publishedDatasetPath(params.outdir, pairId, platform, "latest/latest_spatialdata.zarr")
+            ).toRealPath().toString()
+            tuple(key, pairId, platform, latestZarr, segmentations, configs, finalizedDirs)
+        }
+
+    MENDER_IMPORT(mender_import_current_ch.mix(mender_import_published_ch))
 }

@@ -1,19 +1,24 @@
 process ALIGN {
     tag "${pair_id}"
 
-    publishDir { "${params.outdir}/${pair_id}/alignment" }, mode: "copy", overwrite: true
+    publishDir { "${params.outdir}/${pair_id}/alignment" }, mode: "copy", overwrite: true, pattern: "align_out"
+    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
+    publishDir { "${params.outdir}/${pair_id}/merscope/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "merscope_latest.zarr" ? "latest_spatialdata.zarr" : null }
+    publishDir { "${params.outdir}/${pair_id}/xenium/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "xenium_latest.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
     tuple val(pair_id),
-        val(merscope_zarr_path),
-        val(xenium_zarr_path),
+        path(merscope_zarr, stageAs: "upstream_merscope.zarr"),
+        path(xenium_zarr, stageAs: "upstream_xenium.zarr"),
         path(merscope_tissue_annotation, stageAs: "merscope_tissue_annotation.geojson"),
         path(xenium_tissue_annotation, stageAs: "xenium_tissue_annotation.geojson")
 
     output:
     tuple val(pair_id),
-        val(merscope_zarr_path),
-        val(xenium_zarr_path),
+        path("merscope_latest.zarr"),
+        path("xenium_latest.zarr"),
         path("align_out")
 
     script:
@@ -47,11 +52,15 @@ process ALIGN {
 
     merxen check-alignment-deps --backend "${params.alignment_backend}"
 
+    # own copies of both upstream stores; see bin/merxen-link-copy
+    merxen-link-copy "${merscope_zarr}" merscope_latest.zarr
+    merxen-link-copy "${xenium_zarr}" xenium_latest.zarr
+
     cat > align_config.json <<JSON
 {
   "pair_id": "${pair_id}",
-  "merscope_zarr_path": "${merscope_zarr_path}",
-  "xenium_zarr_path": "${xenium_zarr_path}",
+  "merscope_zarr_path": "merscope_latest.zarr",
+  "xenium_zarr_path": "xenium_latest.zarr",
   "output_dir": "align_out",
   "backend": "${params.alignment_backend}",
   "fixed_platform": "${params.alignment_fixed_platform}",
@@ -210,17 +219,22 @@ process MATERIALIZE_ALIGNMENT {
     publishDir { "${params.outdir}/${pair_id}/alignment_materialization" },
         mode: "copy", overwrite: true,
         saveAs: { filename -> filename == "materialization_summary.json" ? filename : null }
+    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
+    publishDir { "${params.outdir}/${pair_id}/merscope/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "merscope_latest.zarr" ? "latest_spatialdata.zarr" : null }
+    publishDir { "${params.outdir}/${pair_id}/xenium/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "xenium_latest.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
     tuple val(pair_id),
-        val(merscope_zarr_path),
-        val(xenium_zarr_path),
+        path(merscope_zarr, stageAs: "upstream_merscope.zarr"),
+        path(xenium_zarr, stageAs: "upstream_xenium.zarr"),
         path(align_out)
 
     output:
     tuple val(pair_id),
-        val(merscope_zarr_path),
-        val(xenium_zarr_path),
+        path("merscope_latest.zarr"),
+        path("xenium_latest.zarr"),
         path(align_out),
         path("materialization_summary.json")
 
@@ -232,11 +246,15 @@ process MATERIALIZE_ALIGNMENT {
     export MKL_NUM_THREADS="${task.cpus}"
     export NUMEXPR_NUM_THREADS="${task.cpus}"
 
+    # own copies of both upstream stores; see bin/merxen-link-copy
+    merxen-link-copy "${merscope_zarr}" merscope_latest.zarr
+    merxen-link-copy "${xenium_zarr}" xenium_latest.zarr
+
     cat > materialization_config.json <<JSON
     {
       "pair_id": "${pair_id}",
-      "merscope_zarr_path": "${merscope_zarr_path}",
-      "xenium_zarr_path": "${xenium_zarr_path}",
+      "merscope_zarr_path": "merscope_latest.zarr",
+      "xenium_zarr_path": "xenium_latest.zarr",
       "output_dir": "${align_out}",
       "backend": "${params.alignment_backend}",
       "fixed_platform": "${params.alignment_fixed_platform}",
@@ -294,8 +312,8 @@ process ALIGN_QC {
 
     input:
     tuple val(pair_id),
-        val(merscope_zarr),
-        val(xenium_zarr),
+        path(merscope_zarr, stageAs: "merscope_latest.zarr"),
+        path(xenium_zarr, stageAs: "xenium_latest.zarr"),
         path(align_out)
 
     output:

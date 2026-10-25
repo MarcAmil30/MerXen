@@ -194,6 +194,9 @@ process CLUSTERING_SQUIDPY_FINALIZE {
         path("clustering_squidpy_out")
 
     script:
+    // The clustered table goes into the zarr in CLUSTERING_SQUIDPY_IMPORT, once
+    // per platform for every segmentation, so the segmentations do not write
+    // one store side by side. Finalize writes the same clustered H5AD either way.
     """
     set -euo pipefail
     cat > clustering_finalize_config.json <<JSON
@@ -201,7 +204,7 @@ process CLUSTERING_SQUIDPY_FINALIZE {
   "pair_id": "${pair_id}",
   "output_dir": "clustering_squidpy_out",
   "samples": ${samples_json},
-  "write_spatialdata_table": ${params.clustering_squidpy_write_spatialdata_table}
+  "write_spatialdata_table": false
 }
 JSON
 
@@ -209,5 +212,52 @@ JSON
         --config clustering_finalize_config.json \
         --input-dir "${computed_dir}" \
         --output-dir clustering_squidpy_out
+    """
+}
+
+
+process CLUSTERING_SQUIDPY_IMPORT {
+    tag "${pair_id}:${platform}"
+
+    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
+
+    input:
+    // one clustered H5AD per segmentation, in the same order as segmentations
+    tuple val(key),
+        val(pair_id),
+        val(platform),
+        path(latest_zarr, stageAs: "upstream_latest.zarr"),
+        val(segmentations),
+        path(clustered_h5ads, stageAs: "clustered/??/*")
+
+    output:
+    tuple val(key), val(pair_id), val(platform), path("latest_input.zarr")
+
+    script:
+    def h5adList = (clustered_h5ads instanceof List ? clustered_h5ads : [clustered_h5ads])
+        .collect { h5ad -> h5ad.toString() }
+    def pairsJson = groovy.json.JsonOutput.toJson(
+        [segmentations, h5adList].transpose().collect { seg, h5ad -> [seg.toString(), h5ad] }
+    )
+    """
+    set -euo pipefail
+    # own copy of the upstream store; see bin/merxen-link-copy
+    merxen-link-copy "${latest_zarr}" latest_input.zarr
+
+    python - <<'PY'
+import json
+
+import anndata as ad
+
+from merxen.analysis.clustering_squidpy import write_clustered_spatialdata_table
+
+for segmentation, h5ad in json.loads('''${pairsJson}'''):
+    _, table_key = write_clustered_spatialdata_table(
+        "latest_input.zarr", ad.read_h5ad(h5ad), segmentation=segmentation
+    )
+    print(f"{segmentation}: wrote {table_key}")
+PY
     """
 }
