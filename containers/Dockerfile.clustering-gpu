@@ -3,7 +3,8 @@
 # cuML fails to load ("libcuml.so: cannot open shared object file").
 FROM nvidia/cuda:12.9.1-devel-rockylinux9
 
-RUN dnf install -y python3.12 python3.12-pip && dnf clean all
+# procps-ng: Nextflow's task wrapper needs ps to record task metrics
+RUN dnf install -y python3.12 python3.12-pip procps-ng && dnf clean all
 RUN ln -s /usr/bin/python3.12 /usr/local/bin/python3 && \
     ln -s /usr/bin/python3.12 /usr/local/bin/python
 
