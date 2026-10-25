@@ -211,7 +211,9 @@ process MENDER_IMPORT {
         path(finalized_dirs, stageAs: "finalized/??/*")
 
     output:
-    tuple val(key), val(pair_id), val(platform), path("latest_input.zarr"), path("mender_publish")
+    // the manifests themselves, not their folder, so saveAs sees each one's path
+    tuple val(key), val(pair_id), val(platform), path("latest_input.zarr"),
+        path("mender_publish/**/spatialdata_import_manifest.json")
 
     script:
     def jobsJson = groovy.json.JsonOutput.toJson(
