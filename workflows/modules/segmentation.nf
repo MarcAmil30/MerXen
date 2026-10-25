@@ -2,6 +2,10 @@ process CELLPOSE_SEGMENT {
     tag "${pair_id}:${platform}"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true
+    // Also hard-link the outputs into segmentation/ itself, where SEGMENT used to
+    // write them directly and where restarts from published results look.
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "link", overwrite: true,
+        saveAs: { filename -> filename == "segment_out/cellpose_transforms.json" ? null : filename.tokenize("/")[-1] }
 
     input:
     // source zarr and transform/spec are staged; the config names them locally
@@ -10,6 +14,8 @@ process CELLPOSE_SEGMENT {
     output:
     tuple val(key), val(pair_id), val(platform), val(seg_config_json), path("segment_out/cellpose_masks_tiled.npy"), path("segment_out/cellpose_cellprobs_tiled.npy"), path("segment_out/transcripts_for_proseg.csv"), path("segment_out/cellpose_transforms.json"), path("segment_out/cellpose_stitching_stats.json"), emit: segmentation
     path("segment_out/cellpose_model_identity.json"), emit: model_identity
+    // Records which affine seeded the transcript CSV; published beside it.
+    path("segment_out/transcripts_for_proseg.transforms.json"), optional: true, emit: seeding_transforms
 
     script:
     """
@@ -33,6 +39,10 @@ process CELLPOSE_NUCLEI_SEGMENT {
     tag "${pair_id}:${platform}:nuclei"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true
+    // Also hard-link the outputs into segmentation/ itself, where SEGMENT used to
+    // write them directly and where restarts from published results look.
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "link", overwrite: true,
+        saveAs: { filename -> filename == "segment_out/cellpose_transforms.json" ? null : filename.tokenize("/")[-1] }
 
     input:
     // source zarr and transform/spec are staged; the config names them locally
@@ -63,7 +73,12 @@ JSON
 process PROSEG_SEGMENT {
     tag "${pair_id}:${platform}"
 
-    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true,
+        pattern: "segment_out/*"
+    // The latest zarr lives in this task's folder; later stages still add to it in
+    // place, so latest/ links to it rather than holding a copy.
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "segment_out/proseg_base_latest.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
     tuple val(key), val(pair_id), val(platform), val(seg_config_json), path(source_zarr, stageAs: "source_spatialdata.zarr"), path(aux_input), path(cellpose_mask), path(cellpose_cellprob), path(transcripts_csv), path(cellpose_transforms), path(_stitching_stats), path(nuclei_mask), path(_nuclei_stitching_stats), path(proseg_path_file)

@@ -4301,6 +4301,18 @@ def segmentationConfigMap(
             proseg_overrides: [voxel_layers: meta.voxel_layers],
         ],
     ]
+    if (stagedSourceName) {
+        // The staged route declares these files as the outputs of the task
+        // itself; the Python falls back to segment_out/ when the fields are
+        // unset, so nothing inside the task writes into results/.
+        def staged = segmentConfig.dataset
+        ["persistent_latest_zarr_path", "persistent_mask_path",
+            "persistent_cellpose_cellprob_path", "persistent_transcripts_path",
+            "persistent_cellpose_stitching_stats_path", "persistent_nuclei_mask_path",
+            "persistent_nuclei_stitching_stats_path"].each { name ->
+            staged.remove(name)
+        }
+    }
     if (platform == "ATERA") {
         def dataset = segmentConfig.dataset
         ["persistent_transcripts_path", "persistent_nuclei_mask_path",
