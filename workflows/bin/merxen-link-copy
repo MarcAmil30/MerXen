@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Usage: merxen-link-copy SRC_ZARR DST_ZARR
+#
+# Give a stage its own copy of an upstream zarr store to add to, so the
+# upstream task's output is left as it was. Files are hard-linked, so the copy
+# costs no extra space: zarr replaces a chunk or metadata file by writing a new
+# file and renaming it over the old name, which never touches the linked
+# original. The linked files are made read-only, so a writer that edits a file
+# in place fails with "Permission denied" instead of changing the upstream
+# store. On a different filesystem it falls back to a plain copy.
+set -euo pipefail
+
+src=$1
+dst=$2
+
+mkdir "$dst"
+if ! cp -a --link "$src/." "$dst/" 2>/dev/null; then
+    # start again, so cp never writes into a file still linked to the original
+    rm -rf "$dst"
+    mkdir "$dst"
+    cp -a "$src/." "$dst/"
+fi
+find "$dst" -type f -links +1 -exec chmod a-w {} +

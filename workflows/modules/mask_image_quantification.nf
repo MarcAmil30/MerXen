@@ -2,13 +2,17 @@ process MASK_IMAGE_QUANTIFICATION {
     tag "${pair_id}:${platform}"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/mask_image_quantification" }, mode: "symlink", overwrite: true
+    // latest/ links to the newest store in the chain; the stages after this
+    // one still add to it in place, so it is a link, not a copy.
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
     tuple val(key),
         val(pair_id),
         val(platform),
         val(mask_image_quantification_config_json),
-        path(latest_zarr),
+        path(latest_zarr, stageAs: "upstream_latest.zarr"),
         path(mask_path)
 
     output:
@@ -32,9 +36,8 @@ process MASK_IMAGE_QUANTIFICATION {
     export POLARS_MAX_THREADS="${task.cpus}"
     export DASK_NUM_WORKERS="${task.cpus}"
 
-    if [[ ! -e latest_input.zarr ]]; then
-        ln -s ${latest_zarr} latest_input.zarr
-    fi
+    # own copy of the upstream store; see bin/merxen-link-copy
+    merxen-link-copy "${latest_zarr}" latest_input.zarr
     if [[ ! -e mask_image_quantification_input_mask.npy ]]; then
         ln -s ${mask_path} mask_image_quantification_input_mask.npy
     fi
