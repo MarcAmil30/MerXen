@@ -426,7 +426,8 @@ def test_mecr_stage_is_default_enabled_and_uses_one_reference_task(
     module_text = (repo_root / "workflows" / "modules" / "mecr.nf").read_text()
 
     for expected in [
-        'include { MECR_REFERENCE; MECR_REFERENCE_ATERA; MECR } from "./modules/mecr"',
+        'include { MECR_REFERENCE; MECR_REFERENCE_ATERA; MECR; mecrReferenceFiles }'
+        ' from "./modules/mecr"',
         '"mecr": "mecr"',
         'stages += ["mecr"]',
         "settings.run_mecr",
@@ -435,7 +436,7 @@ def test_mecr_stage_is_default_enabled_and_uses_one_reference_task(
         "mergeMecrSamplesJson",
         ".collect()",
         ".filter { samplesJsonValues -> !samplesJsonValues.isEmpty() }",
-        "MECR_REFERENCE(mecr_reference_inputs_ch)",
+        "mecr_reference_inputs_ch, mecr_reference_files_ch",
         "MECR_REFERENCE_ATERA(",
         "mecrSamplesUseAteraReference(samplesJson)",
         "MECR(mecr_inputs_ch)",
