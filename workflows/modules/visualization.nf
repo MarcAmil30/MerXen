@@ -6,7 +6,8 @@ process VISUALIZE {
     input:
     tuple val(pair_id),
         val(segmentation),
-        val(samples_json)
+        val(samples_json),
+        path(sample_zarrs, stageAs: "zarrs/??/*")
 
     output:
     tuple val(pair_id), val(segmentation), path("visualize_out")

@@ -27,7 +27,8 @@ process MECR_REFERENCE {
 
     input:
     tuple val(reference_atlas),
-        val(samples_json)
+        val(samples_json),
+        path(sample_zarrs, stageAs: "zarrs/??/*")
     // mecrReferenceInputs() as staged by main.nf: local names plus the files
     tuple val(reference_inputs), path(reference_files, stageAs: "inputs/??/*")
 
@@ -83,6 +84,7 @@ process MECR {
     tuple val(pair_id),
         val(segmentation),
         val(samples_json),
+        path(sample_zarrs, stageAs: "zarrs/??/*"),
         path(reference_out)
 
     output:

@@ -1110,6 +1110,22 @@ def stagedInputName(rawPath, files) {
     return String.format("inputs/%02d/%s", files.size(), staged.name)
 }
 
+// [samples JSON, zarr stores to stage] for a reader that takes
+// path(sample_zarrs, stageAs: "zarrs/??/*"): each sample's zarr_path becomes
+// zarrs/<nn>/<name>, as stageConfigFiles does for inputs/.
+def stageSampleZarrs(samplesJson) {
+    def samples = new groovy.json.JsonSlurper().parseText(samplesJson.toString())
+    def zarrs = []
+    samples.each { sample ->
+        if (!isBlankPath(sample.zarr_path)) {
+            def staged = file(sample.zarr_path.toString())
+            zarrs << staged
+            sample.zarr_path = String.format("zarrs/%02d/%s", zarrs.size(), staged.name)
+        }
+    }
+    return [groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(samples)), zarrs]
+}
+
 // A module's reference inputs as [local names, files to stage]. The cache
 // directory is staged only if it already exists; otherwise the stage creates
 // it and downloads into it, so it keeps its absolute path.
@@ -2963,7 +2979,7 @@ workflow {
             def referenceAtlas = normalizeSpecies(params.species) == "mouse"
                 ? "wmb"
                 : "whb"
-            tuple(referenceAtlas, mergeMecrSamplesJson(samplesJsonValues))
+            [referenceAtlas] + stageSampleZarrs(mergeMecrSamplesJson(samplesJsonValues))
         }
     mecr_reference_files_ch = channel.value(stageReferenceInputs(
         mecrReferenceInputs(normalizeSpecies(params.species) == "mouse" ? "wmb" : "whb"),
@@ -2973,7 +2989,7 @@ workflow {
     mecr_inputs_ch = mecr_samples_ch
         .combine(mecr_reference_results_ch)
         .map { pairId, segmentation, samplesJson, referenceOut ->
-            tuple(pairId, segmentation, samplesJson, referenceOut)
+            [pairId, segmentation] + stageSampleZarrs(samplesJson) + [referenceOut]
         }
     mecr_results_ch = MECR(mecr_inputs_ch)
 
@@ -3390,7 +3406,11 @@ workflow {
 
     visualize_inputs_ch = visualize_without_compare_ch.mix(visualize_after_compare_ch)
 
-    visualize_results_ch = VISUALIZE(visualize_inputs_ch)
+    visualize_results_ch = VISUALIZE(
+        visualize_inputs_ch.map { pairId, segmentation, samplesJson ->
+            [pairId, segmentation] + stageSampleZarrs(samplesJson)
+        }
+    )
 
     visualize_done_ch = visualize_results_ch.map { pairId, segmentation, _visualizeOutDir ->
         tuple("${pairId}|${segmentation}", true)
@@ -3475,12 +3495,14 @@ workflow {
             transcriptAnalysisEnabled,
             row ->
             def annotated = spatialGeneSamplesJson(samplesJson, row)
+            def staged = stageSampleZarrs(annotated[0])
             tuple(
                 pairId,
                 segmentation,
-                annotated[0],
+                staged[0],
                 transcriptAnalysisEnabled,
                 annotated[1],
+                staged[1],
             )
         }
 
@@ -3542,7 +3564,12 @@ workflow {
     clustering_reference_ch = channel.value(
         stageReferenceInputs(clusteringReferenceInputs(), "reference_cache_dir")
     )
-    clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(clustering_inputs_ch, clustering_reference_ch)
+    clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(
+        clustering_inputs_ch.map { pairId, segmentation, samplesJson ->
+            [pairId, segmentation] + stageSampleZarrs(samplesJson)
+        },
+        clustering_reference_ch,
+    )
     clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(clustering_prepared_ch, clustering_reference_ch)
     clustering_results_ch = CLUSTERING_SQUIDPY_FINALIZE(clustering_computed_ch)
 
@@ -4123,9 +4150,7 @@ workflow TERMINAL_ANALYSES {
                         platform,
                         sampleId,
                         clusteredH5ad,
-                        java.nio.file.Paths.get(
-                            sample.zarr_path.toString()
-                        ).toRealPath().toString(),
+                        null,  // replaced below by the store after the clustered tables
                         settings,
                     )
                 }
