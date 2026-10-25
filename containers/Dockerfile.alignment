@@ -1,0 +1,25 @@
+# ALIGN and MATERIALIZE_ALIGNMENT. VALIS pins a stack the base image cannot
+# share (envs/environment.alignment.yml), so it gets its own image.
+FROM condaforge/miniforge3:24.7.1-0
+
+# The conda-only part of envs/environment.alignment.yml: Java for VALIS's
+# Bio-Formats reader, libvips and OpenSlide.
+RUN conda create -y -n merxen-alignment -c conda-forge \
+        python=3.12 openjdk=11 "libvips>=8.11" openslide pip && \
+    conda clean --all --yes
+ENV PATH=/opt/conda/envs/merxen-alignment/bin:$PATH
+
+# The locked stack first, then MerXen and VALIS without re-resolving
+# dependencies. The env file's `pip install -e ../` pulls cell-type-mapper and
+# conflicts with the pinned VALIS stack, and VALIS's own NumPy<2 metadata
+# conflicts with SpatialData 0.8; ALIGN installs VALIS --no-deps for the same
+# reason when it is missing. Baking it in means ALIGN needs no network.
+ARG VALIS_REQUIREMENT="valis-wsi==1.2.0"
+WORKDIR /opt/merxen
+COPY requirements/requirements.alignment.lock ./requirements/requirements.alignment.lock
+RUN python -m pip install --no-cache-dir -r requirements/requirements.alignment.lock
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN python -m pip install --no-cache-dir --no-deps . "${VALIS_REQUIREMENT}"
+
+CMD ["python"]

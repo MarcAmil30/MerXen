@@ -21,7 +21,11 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN cargo install proseg
+# The same ProSeg as params.proseg_version / proseg_git_rev: ENSURE_PROSEG
+# rejects any other version and would then try to build one at run time.
+ARG PROSEG_GIT_URL=https://github.com/dcjones/proseg.git
+ARG PROSEG_GIT_REV=e7df1eace923ce4c6ec70b2c597c5d126aa3db88
+RUN cargo install --git "${PROSEG_GIT_URL}" --rev "${PROSEG_GIT_REV}" proseg
 RUN ln -sf /usr/local/cargo/bin/proseg /usr/local/bin/proseg
 
 # Install the pinned dependency tree from the lockfile, then the checked-out

@@ -1,0 +1,11 @@
+# The Dockerfiles copy only requirements/, envs/, src/, pyproject.toml and
+# README.md; keep run outputs and caches out of the build context.
+.git
+work
+results*
+tmp
+notebooks
+tests
+**/__pycache__
+*.zarr
+.nextflow*
