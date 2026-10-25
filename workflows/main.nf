@@ -7486,19 +7486,14 @@ workflow {
     // record is taken per segmentation from the manifests it published.
     if (AnnotationSettings.isMapFirstRun(params)) { // rca-site:H6
         MENDER_IMPORT.out.subscribe {
-            _key, pairId, platform, _latestZarr, menderPublish, segmentations ->
-                (segmentations instanceof List ? segmentations : [segmentations]).each {
-                    segmentation ->
-                        AnnotationRunRecord.menderImported(
-                            pairId,
-                            segmentation,
-                            platform,
-                            menderPublish.resolve(
-                                "${segmentation}/mender/mender_out/" +
-                                "${platform.toString().toLowerCase()}/" +
-                                "spatialdata_import_manifest.json"
-                            ),
-                        )
+            _key, pairId, platform, _latestZarr, manifests ->
+                (manifests instanceof List ? manifests : [manifests]).each { manifest ->
+                    // mender_publish/<segmentation>/mender/mender_out/<platform>/
+                    def parts = manifest.toString().split("/") as List
+                    def segmentation = parts[parts.indexOf("mender_publish") + 1]
+                    AnnotationRunRecord.menderImported(
+                        pairId, segmentation, platform, manifest,
+                    )
                 }
         }
     }

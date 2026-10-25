@@ -211,10 +211,9 @@ process MENDER_IMPORT {
         path(finalized_dirs, stageAs: "finalized/??/*")
 
     output:
-    // segmentations in the order their manifests were published, for the
-    // per-segmentation annotation record in main.nf
+    // the manifests themselves, not their folder, so saveAs sees each one's path
     tuple val(key), val(pair_id), val(platform), path("latest_input.zarr"),
-        path("mender_publish"), val(segmentations)
+        path("mender_publish/**/spatialdata_import_manifest.json")
 
     script:
     def jobsJson = groovy.json.JsonOutput.toJson(
