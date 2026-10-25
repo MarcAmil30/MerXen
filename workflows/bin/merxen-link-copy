@@ -8,16 +8,20 @@
 # original. The linked files are made read-only, so a writer that edits a file
 # in place fails with "Permission denied" instead of changing the upstream
 # store. On a different filesystem it falls back to a plain copy.
+#
+# Only file modes and times are kept, not owners, ACLs or extended
+# attributes: inside a rootless container those cannot be set ("preserving
+# permissions ... Invalid argument" on CephFS), and the store needs none.
 set -euo pipefail
 
 src=$1
 dst=$2
 
 mkdir "$dst"
-if ! cp -a --link "$src/." "$dst/" 2>/dev/null; then
+if ! cp -R -P --link "$src/." "$dst/" 2>/dev/null; then
     # start again, so cp never writes into a file still linked to the original
     rm -rf "$dst"
     mkdir "$dst"
-    cp -a "$src/." "$dst/"
+    cp -R -P --preserve=mode,timestamps "$src/." "$dst/"
 fi
 find "$dst" -type f -links +1 -exec chmod a-w {} +

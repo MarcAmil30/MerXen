@@ -42,11 +42,13 @@ process QC {
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/${segmentation}/qc" }, mode: "symlink", overwrite: true
 
     input:
+    // staged under a fixed name: the store's own folder name depends on which
+    // stage wrote it last, and qc/ publishes it under this name
     tuple val(key),
         val(pair_id),
         val(platform),
         val(segmentation),
-        path(latest_zarr),
+        path(latest_zarr, stageAs: "latest_spatialdata.zarr"),
         val(table_key),
         val(shape_key)
 
