@@ -30,13 +30,15 @@ RUN ln -sf /usr/local/cargo/bin/proseg /usr/local/bin/proseg
 
 # Install the pinned dependency tree from the lockfile, then the checked-out
 # MerXen source without re-resolving its dependencies, so the image matches
-# CI. uv is required: pip rejects the lock (ResolutionImpossible) because
+# CI. The lock is the complete `uv pip compile` output, so it is installed
+# with --no-deps: resolving it again fails in both pip (ResolutionImpossible)
+# and uv 0.11.7 ("conflicting URLs for package abc-atlas-access"), because
 # cell_type_mapper declares abc_atlas_access as an unpinned git URL while the
 # lock pins a commit.
 RUN python3 -m pip install --no-cache-dir "uv==0.11.7"
 WORKDIR /opt/merxen
 COPY requirements/requirements.lock ./requirements/requirements.lock
-RUN uv pip install --system --python /usr/bin/python3.12 --no-cache -r requirements/requirements.lock
+RUN uv pip install --system --python /usr/bin/python3.12 --no-cache --no-deps -r requirements/requirements.lock
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN uv pip install --system --python /usr/bin/python3.12 --no-cache --no-deps .
