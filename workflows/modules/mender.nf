@@ -46,6 +46,10 @@ process MENDER_PREPARE {
     """
     set -euo pipefail
     export PYTHONPATH="${projectDir}/../src:\${PYTHONPATH:-}"
+    # numba and matplotlib caches in the task folder, as merxen.io does for the
+    # main env: in a container the home folder may be read-only or shared
+    export NUMBA_CACHE_DIR="\$PWD/tmp/numba"
+    export MPLCONFIGDIR="\$PWD/tmp/mpl"
     export OMP_NUM_THREADS="${task.cpus}"
     export OPENBLAS_NUM_THREADS="${task.cpus}"
     export MKL_NUM_THREADS="${task.cpus}"
@@ -122,6 +126,10 @@ process MENDER_COMPUTE {
     set -euo pipefail
     export CUDA_VISIBLE_DEVICES=""
     export PYTHONPATH="${projectDir}/../src:\${PYTHONPATH:-}"
+    # numba and matplotlib caches in the task folder, as merxen.io does for the
+    # main env: in a container the home folder may be read-only or shared
+    export NUMBA_CACHE_DIR="\$PWD/tmp/numba"
+    export MPLCONFIGDIR="\$PWD/tmp/mpl"
     export OMP_NUM_THREADS="${task.cpus}"
     export OPENBLAS_NUM_THREADS="${task.cpus}"
     export MKL_NUM_THREADS="${task.cpus}"
@@ -174,6 +182,10 @@ process MENDER_FINALIZE {
     """
     set -euo pipefail
     export PYTHONPATH="${projectDir}/../src:\${PYTHONPATH:-}"
+    # numba and matplotlib caches in the task folder, as merxen.io does for the
+    # main env: in a container the home folder may be read-only or shared
+    export NUMBA_CACHE_DIR="\$PWD/tmp/numba"
+    export MPLCONFIGDIR="\$PWD/tmp/mpl"
     export OMP_NUM_THREADS="${task.cpus}"
     export OPENBLAS_NUM_THREADS="${task.cpus}"
     export MKL_NUM_THREADS="${task.cpus}"
@@ -224,6 +236,10 @@ process MENDER_IMPORT {
     """
     set -euo pipefail
     export PYTHONPATH="${projectDir}/../src:\${PYTHONPATH:-}"
+    # numba and matplotlib caches in the task folder, as merxen.io does for the
+    # main env: in a container the home folder may be read-only or shared
+    export NUMBA_CACHE_DIR="\$PWD/tmp/numba"
+    export MPLCONFIGDIR="\$PWD/tmp/mpl"
     export OMP_NUM_THREADS="${task.cpus}"
     export OPENBLAS_NUM_THREADS="${task.cpus}"
     export MKL_NUM_THREADS="${task.cpus}"
