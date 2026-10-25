@@ -14,8 +14,14 @@ process BUILD_SPATIALDATA {
     def forceFlag = params.force_spatialdata_build ? "--force-rerun" : ""
     def buildConfig = new groovy.json.JsonSlurper().parseText(build_config_json)
     // Readers name elements after the raw folder's parent, so stage it under the
-    // platform name rather than the task work directory
-    buildConfig.input_path = "${platform}/${raw_input}".toString()
+    // platform name rather than the task work directory. A raw export can also
+    // arrive as one archive (bin/merxen-unpack-raw), named after the folder.
+    def rawName = raw_input.name
+    def rawFolder = rawName.replaceFirst(/\.(tar\.gz|tgz|tar|zip)$/, "")
+    def stageRawInput = rawFolder != rawName
+        ? "merxen-unpack-raw '${raw_input}' '${platform}/${rawFolder}'"
+        : "ln -sfn '../${raw_input}' '${platform}/${raw_input}'"
+    buildConfig.input_path = "${platform}/${rawFolder}".toString()
     if (aux_input) {
         def auxField = platform == "MERSCOPE" ? "merscope_transform_path" : "xenium_spec_path"
         buildConfig[auxField] = "${aux_input}".toString()
@@ -35,7 +41,7 @@ process BUILD_SPATIALDATA {
     export DASK_NUM_WORKERS="${task.cpus}"
 
     mkdir -p "${platform}"
-    ln -sfn "../${raw_input}" "${platform}/${raw_input}"
+    ${stageRawInput}
 
     cat > build_config.json <<'JSON'
 ${buildConfigText}

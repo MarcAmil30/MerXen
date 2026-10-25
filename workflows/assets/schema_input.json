@@ -14,9 +14,9 @@
             },
             "merscope_dir": {
                 "type": "string",
-                "format": "directory-path",
+                "format": "path",
                 "exists": true,
-                "description": "Raw MERSCOPE region export"
+                "description": "Raw MERSCOPE region export: a folder, or a .tar, .tar.gz, .tgz or .zip of one"
             },
             "merscope_spatialdata_path": {
                 "type": "string",
@@ -31,9 +31,9 @@
             },
             "xenium_dir": {
                 "type": "string",
-                "format": "directory-path",
+                "format": "path",
                 "exists": true,
-                "description": "Raw Xenium output bundle"
+                "description": "Raw Xenium output bundle: a folder, or a .tar, .tar.gz, .tgz or .zip of one"
             },
             "xenium_spatialdata_path": {
                 "type": "string",
