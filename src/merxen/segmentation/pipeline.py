@@ -842,7 +842,16 @@ def run_cellpose_nuclei_segmentation(
         )
 
     nuclei_config = config.model_copy(deep=True)
-    nuclei_config.dataset.channels = ["DAPI"]
+    # The nuclear stain is "DAPI" when the configured channels name it; older
+    # Xenium exports have one unnamed morphology channel ("0"), so fall back to
+    # the first configured channel.
+    configured_channels = list(config.dataset.channels or [])
+    nuclei_channel = (
+        "DAPI"
+        if not configured_channels or "DAPI" in configured_channels
+        else configured_channels[0]
+    )
+    nuclei_config.dataset.channels = [nuclei_channel]
     nuclei_config.cellpose = config.cellpose.model_copy(
         update={"model_type": config.nuclei_cellpose.model_type}
     )
