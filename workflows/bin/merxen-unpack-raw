@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Usage: merxen-unpack-raw ARCHIVE DEST_DIR
+#
+# Unpack a raw MERSCOPE region export or Xenium output bundle that arrives as
+# one .tar, .tar.gz, .tgz or .zip file (Flow.bio data are single files) into
+# DEST_DIR. An archive holding a single top-level folder unpacks to that
+# folder's contents; otherwise its top level is the export itself.
+set -euo pipefail
+archive=$1; dest=$2
+tmp="${dest}.unpack"
+rm -rf "$tmp" "$dest"
+mkdir -p "$tmp"
+python3 - "$archive" "$tmp" <<'PY'
+import sys, tarfile, zipfile
+archive, out = sys.argv[1], sys.argv[2]
+if zipfile.is_zipfile(archive):
+    with zipfile.ZipFile(archive) as zf:
+        zf.extractall(out)
+else:
+    with tarfile.open(archive) as tf:
+        tf.extractall(out, filter="data")
+PY
+mapfile -t top < <(find "$tmp" -mindepth 1 -maxdepth 1 ! -name "__MACOSX")
+if [[ ${#top[@]} -eq 1 && -d ${top[0]} ]]; then
+    mv "${top[0]}" "$dest"
+    rm -rf "$tmp"
+else
+    mv "$tmp" "$dest"
+fi

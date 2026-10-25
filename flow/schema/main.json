@@ -33,6 +33,7 @@
             {
               "name": "merscope_dir",
               "type": "data",
+              "description": "Raw MERSCOPE region export, uploaded as one .tar, .tar.gz, .tgz or .zip.",
               "render": true,
               "required": false
             },
@@ -70,6 +71,7 @@
             {
               "name": "xenium_dir",
               "type": "data",
+              "description": "Raw Xenium output bundle, uploaded as one .tar, .tar.gz, .tgz or .zip.",
               "render": true,
               "required": false
             },
