@@ -5166,15 +5166,6 @@ workflow {
                 )
             }
 
-            def persistentLatestZarrPath = file(
-                publishedDatasetPath(
-                    params.outdir,
-                    pairId,
-                    platform,
-                    "latest/latest_spatialdata.zarr",
-                )
-            ).toAbsolutePath().toString()
-
             def enrichConfig = [
                 dataset_name: "${pairId}_${platform}",
                 platform: platform,
@@ -5183,7 +5174,6 @@ workflow {
                 nuclei_mask_path: "enrich_input_nuclei_mask.npy",
                 original_data_path: "source_spatialdata.zarr",
                 output_dir: "enrich_out",
-                persistent_output_path: persistentLatestZarrPath,
                 transform_path: null,
             ]
             // Native rows enrich the vendor segmentation; no Cellpose mask is
