@@ -73,10 +73,6 @@ process PROSEG_SEGMENT {
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/segmentation" }, mode: "symlink", overwrite: true,
         pattern: "segment_out/*"
-    // The latest zarr lives in this task's folder; later stages still add to it in
-    // place, so latest/ links to it rather than holding a copy.
-    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "segment_out/proseg_base_latest.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
     tuple val(key), val(pair_id), val(platform), val(seg_config_json), path(source_zarr, stageAs: "source_spatialdata.zarr"), path(aux_input), path(cellpose_mask), path(cellpose_cellprob), path(transcripts_csv), path(cellpose_transforms), path(_stitching_stats), path(nuclei_mask), path(_nuclei_stitching_stats), path(proseg_path_file)
