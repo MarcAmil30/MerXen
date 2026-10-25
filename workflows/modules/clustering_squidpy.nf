@@ -220,9 +220,10 @@ JSON
 process CLUSTERING_SQUIDPY_IMPORT {
     tag "${pair_id}:${platform}"
 
-    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
-    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
+    // latest/.chain/<place in the chain>_<stage>: this stage's store; at the end
+    // of the run the highest one becomes latest/ (materializeLatestStores, main.nf)
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest/.chain" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "07_CLUSTERING_SQUIDPY_IMPORT" : null }
 
     input:
     // one clustered H5AD per segmentation, in the same order as segmentations

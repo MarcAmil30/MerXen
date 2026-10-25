@@ -2,11 +2,12 @@ process ALIGN {
     tag "${pair_id}"
 
     publishDir { "${params.outdir}/${pair_id}/alignment" }, mode: "copy", overwrite: true, pattern: "align_out"
-    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
-    publishDir { "${params.outdir}/${pair_id}/merscope/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "merscope_latest.zarr" ? "latest_spatialdata.zarr" : null }
-    publishDir { "${params.outdir}/${pair_id}/xenium/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "xenium_latest.zarr" ? "latest_spatialdata.zarr" : null }
+    // latest/.chain/<place in the chain>_<stage>: this stage's store; at the end
+    // of the run the highest one becomes latest/ (materializeLatestStores, main.nf)
+    publishDir { "${params.outdir}/${pair_id}/merscope/latest/.chain" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "merscope_latest.zarr" ? "05_ALIGN" : null }
+    publishDir { "${params.outdir}/${pair_id}/xenium/latest/.chain" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "xenium_latest.zarr" ? "05_ALIGN" : null }
 
     input:
     tuple val(pair_id),
@@ -219,11 +220,12 @@ process MATERIALIZE_ALIGNMENT {
     publishDir { "${params.outdir}/${pair_id}/alignment_materialization" },
         mode: "copy", overwrite: true,
         saveAs: { filename -> filename == "materialization_summary.json" ? filename : null }
-    // latest/ follows the newest store in the chain (see bin/merxen-link-copy)
-    publishDir { "${params.outdir}/${pair_id}/merscope/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "merscope_latest.zarr" ? "latest_spatialdata.zarr" : null }
-    publishDir { "${params.outdir}/${pair_id}/xenium/latest" }, mode: "symlink", overwrite: true,
-        saveAs: { filename -> filename == "xenium_latest.zarr" ? "latest_spatialdata.zarr" : null }
+    // latest/.chain/<place in the chain>_<stage>: this stage's store; at the end
+    // of the run the highest one becomes latest/ (materializeLatestStores, main.nf)
+    publishDir { "${params.outdir}/${pair_id}/merscope/latest/.chain" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "merscope_latest.zarr" ? "06_MATERIALIZE_ALIGNMENT" : null }
+    publishDir { "${params.outdir}/${pair_id}/xenium/latest/.chain" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "xenium_latest.zarr" ? "06_MATERIALIZE_ALIGNMENT" : null }
 
     input:
     tuple val(pair_id),

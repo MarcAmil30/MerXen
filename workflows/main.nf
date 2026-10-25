@@ -1577,40 +1577,71 @@ def publishedPairPath(outdir, pairId, suffix) {
     return "${outdir}/${pairId}/${suffix}"
 }
 
-// While the run goes, each latest/latest_spatialdata.zarr is a symlink to the
-// newest store in the work folder. At the end, replace each with a hard-linked
-// copy of that store (bin/merxen-link-copy; a real copy across file systems),
-// so deleting work/ keeps it.
+// Each stage that writes a store publishes it as a symlink into the work
+// folder, latest/.chain/<place in the chain>_<stage> (e.g. 04_MASK_IMAGE_QUANTIFICATION).
+// At the end of the run, the highest one is hard-linked into
+// latest/.stores/<task> (bin/merxen-link-copy; a real copy across file
+// systems) and latest/latest_spatialdata.zarr is pointed there, so it does not
+// depend on the order Nextflow publishes in (cached tasks on -resume publish
+// all at once) and deleting work/ keeps it. Older copies in .stores are
+// removed; a latest_spatialdata.zarr folder from before this is kept as
+// .stores/previous-<time>.
 def materializeLatestStores(outdir, linkCopyScript) {
     def root = new File(outdir.toString())
     if (outdir.toString().contains("://") || !root.isDirectory()) {
         return
     }
-    def links = []
+    def chains = []
     root.eachDir { pairDir ->
         pairDir.eachDir { platformDir ->
-            def link = new File(platformDir, "latest/latest_spatialdata.zarr").toPath()
-            if (java.nio.file.Files.isSymbolicLink(link)) {
-                links << link
+            def chain = new File(platformDir, "latest/.chain")
+            if (chain.isDirectory()) {
+                chains << chain.toPath()
             }
         }
     }
-    links.each { link ->
-        def partial = link.resolveSibling(".latest_spatialdata.zarr.partial")
+    chains.each { chain ->
+        def newest = chain.toFile().listFiles().findAll { entry ->
+            java.nio.file.Files.isSymbolicLink(entry.toPath()) && entry.exists()
+        }.max { entry -> entry.name }
+        if (newest == null) {
+            return
+        }
+        def link = chain.resolveSibling("latest_spatialdata.zarr")
+        def stores = chain.resolveSibling(".stores")
+        def partial = stores.resolve(".partial")
         try {
-            def target = link.toRealPath()
-            ["rm", "-rf", partial.toString()].execute().waitFor()
-            def proc = ["bash", linkCopyScript.toString(), target.toString(), partial.toString()].execute()
-            proc.waitForProcessOutput(System.out, System.err)
-            if (proc.exitValue() != 0) {
-                throw new IllegalStateException("merxen-link-copy exited with ${proc.exitValue()}")
+            def target = newest.toPath().toRealPath()
+            // work/<ab>/<cdef...>/latest_input.zarr -> .stores/<abcdef...>
+            def name = "${target.parent.parent.fileName}${target.parent.fileName}".toString()
+            def store = stores.resolve(name)
+            java.nio.file.Files.createDirectories(stores)
+            if (!java.nio.file.Files.isDirectory(store)) {
+                ["rm", "-rf", partial.toString()].execute().waitFor()
+                def proc = ["bash", linkCopyScript.toString(), target.toString(), partial.toString()].execute()
+                proc.waitForProcessOutput(System.out, System.err)
+                if (proc.exitValue() != 0) {
+                    throw new IllegalStateException("merxen-link-copy exited with ${proc.exitValue()}")
+                }
+                java.nio.file.Files.move(partial, store)
             }
-            java.nio.file.Files.delete(link)
-            java.nio.file.Files.move(partial, link)
+            if (java.nio.file.Files.isDirectory(link, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                java.nio.file.Files.move(link, stores.resolve("previous-${System.currentTimeMillis()}"))
+            }
+            def newLink = chain.resolveSibling(".latest_spatialdata.zarr.link")
+            java.nio.file.Files.deleteIfExists(newLink)
+            java.nio.file.Files.createSymbolicLink(newLink, java.nio.file.Paths.get(".stores", name))
+            java.nio.file.Files.move(newLink, link, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            stores.toFile().eachDir { old ->
+                if (old.name != name && !old.name.startsWith("previous-")) {
+                    ["rm", "-rf", old.path].execute().waitFor()
+                }
+            }
+            ["rm", "-rf", chain.toString()].execute().waitFor()
         }
         catch (Exception e) {
             ["rm", "-rf", partial.toString()].execute().waitFor()
-            log.warn("Left ${link} as a symlink into the work folder: ${e.message}")
+            log.warn("Could not update ${link}: ${e.message}")
         }
     }
 }
