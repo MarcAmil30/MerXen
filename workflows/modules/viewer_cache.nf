@@ -2,9 +2,13 @@ process VIEWER_CACHE {
     tag "${pair_id}:${platform}"
 
     publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/viewer_cache" }, mode: "symlink", overwrite: true
+    // latest/ links to the newest store in the chain; the stages after this
+    // one still add to it in place, so it is a link, not a copy.
+    publishDir { "${params.outdir}/${pair_id}/${platform.toLowerCase()}/latest" }, mode: "symlink", overwrite: true,
+        saveAs: { filename -> filename == "latest_input.zarr" ? "latest_spatialdata.zarr" : null }
 
     input:
-    tuple val(key), val(pair_id), val(platform), val(viewer_cache_config_json), path(latest_zarr), path(transform_input)
+    tuple val(key), val(pair_id), val(platform), val(viewer_cache_config_json), path(latest_zarr, stageAs: "upstream_latest.zarr"), path(transform_input)
 
     output:
     tuple val(key), val(pair_id), val(platform), path("latest_input.zarr"), path("viewer_cache_out")
@@ -23,9 +27,8 @@ process VIEWER_CACHE {
     export POLARS_MAX_THREADS="${task.cpus}"
     export DASK_NUM_WORKERS="${task.cpus}"
 
-    if [[ ! -e latest_input.zarr ]]; then
-        ln -s ${latest_zarr} latest_input.zarr
-    fi
+    # own copy of the upstream store; see bin/merxen-link-copy
+    merxen-link-copy "${latest_zarr}" latest_input.zarr
 
     cat > viewer_cache_config.json <<'JSON'
 ${viewer_cache_config_json}
