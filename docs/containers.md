@@ -68,6 +68,11 @@ nextflow run workflows/main.nf -profile docker      --samplesheet ... --outdir .
 nextflow run workflows/main.nf -profile singularity --samplesheet ... --outdir ...
 ```
 
+Both profiles set the host settings that `nextflow.config` leaves to a site
+profile: ProSeg from the image with 32 threads, and a 300 GB memory budget for
+Cellpose tiling and transcript chunks (`--max_ram_gb`, `--warn_ram_gb`). Set
+them to the size of your nodes.
+
 Use `--container_registry` and `--container_tag` for other images. GPUs are
 passed to Cellpose (`--cellpose_gpu true`) and GPU clustering
 (`--clustering_squidpy_use_gpu true`) as `--gpus all` (Docker) or `--nv`
