@@ -12,10 +12,6 @@ RUN ln -s /usr/bin/python3.12 /usr/local/bin/python3
 RUN ln -s /usr/bin/python3.12 /usr/local/bin/python
 RUN python3 --version
 
-# install cuSPARSELt
-RUN dnf install -y libcusparselt0 libcusparselt-devel && \
-    ln -sf /usr/lib64/libcusparseLt.so.0 /usr/local/cuda/lib64/libcusparseLt.so.0
-
 # Proseg
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
@@ -42,16 +38,19 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN uv pip install --system --python /usr/bin/python3.12 --no-cache --no-deps .
 
-# Cellpose-SAM weights (cpsam_v2, 1.2 GB), fetched at build time: Cellpose 4
-# loads them whatever cellpose_model_type says, and would otherwise download
-# them into ~/.cellpose on first use, which needs network and a writable home.
+# Cellpose-SAM weights (1.2 GB), fetched at build time: Cellpose 4 loads them
+# whatever cellpose_model_type says, and would otherwise download them into
+# ~/.cellpose on first use, which needs network and a writable home. Building
+# the model the way MerXen does fetches the right file for the locked Cellpose
+# (4.1.1: "cpsam"; 4.2 renamed it "cpsam_v2").
 ENV CELLPOSE_LOCAL_MODELS_PATH=/opt/cellpose/models
-RUN python3 -c "from cellpose.models import cache_model_path; print(cache_model_path('cpsam_v2'))" && \
-    chmod -R a+rX /opt/cellpose
+RUN python3 -c "from cellpose import models; models.CellposeModel(gpu=False)" && \
+    ls -l /opt/cellpose/models && chmod -R a+rX /opt/cellpose
 
 # Fallback cache folders: a non-root container user usually has no writable
 # home. MerXen's own code points both at the task folder where it can.
 ENV MPLCONFIGDIR=/tmp/matplotlib \
-    NUMBA_CACHE_DIR=/tmp/numba
+    NUMBA_CACHE_DIR=/tmp/numba \
+    XDG_CACHE_HOME=/tmp/.cache
 
 CMD ["python3"]
