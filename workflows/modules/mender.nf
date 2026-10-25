@@ -2,13 +2,16 @@ process MENDER_PREPARE {
     tag "${pair_id}:${platform}:${segmentation}"
 
     input:
-    // the store is only read here; MENDER_IMPORT writes to its own copy
+    // the store is staged for reading here only; spatialdata_path stays its
+    // location as text for the later stages' tuples, and MENDER_IMPORT
+    // writes to its own copy of the newest store
     tuple val(task_key),
         val(pair_id),
         val(segmentation),
         val(platform),
         val(sample_id),
-        path(spatialdata_path, stageAs: "spatialdata.zarr"),
+        val(spatialdata_path),
+        path(spatialdata_zarr, stageAs: "spatialdata.zarr"),
         val(source_spatialdata_table),
         val(native_shape_key),
         val(source_h5ad_path),
