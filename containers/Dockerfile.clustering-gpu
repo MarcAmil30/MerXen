@@ -1,4 +1,7 @@
-FROM nvidia/cuda:12.3.2-cudnn9-devel-rockylinux9
+# CUDA 12.9 to match the RAPIDS wheels pip resolves (26.6, built for CUDA
+# 12.9): with the older 12.3.2-cudnn9 base, its libcudart is found first and
+# cuML fails to load ("libcuml.so: cannot open shared object file").
+FROM nvidia/cuda:12.9.1-devel-rockylinux9
 
 RUN dnf install -y python3.12 python3.12-pip && dnf clean all
 RUN ln -s /usr/bin/python3.12 /usr/local/bin/python3 && \
@@ -28,6 +31,8 @@ ENV PYTHONPATH=/opt/merxen/src
 # Fallback cache folders: a non-root container user usually has no writable
 # home. MerXen's own code points both at the task folder where it can.
 ENV MPLCONFIGDIR=/tmp/matplotlib \
-    NUMBA_CACHE_DIR=/tmp/numba
+    NUMBA_CACHE_DIR=/tmp/numba \
+    CUPY_CACHE_DIR=/tmp/cupy \
+    XDG_CACHE_HOME=/tmp/.cache
 
 CMD ["python3"]
