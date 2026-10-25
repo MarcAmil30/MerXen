@@ -25,4 +25,9 @@ WORKDIR /opt/merxen
 COPY src ./src
 ENV PYTHONPATH=/opt/merxen/src
 
+# Fallback cache folders: a non-root container user usually has no writable
+# home. MerXen's own code points both at the task folder where it can.
+ENV MPLCONFIGDIR=/tmp/matplotlib \
+    NUMBA_CACHE_DIR=/tmp/numba
+
 CMD ["python3"]

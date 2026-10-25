@@ -41,4 +41,16 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN uv pip install --system --python /usr/bin/python3.12 --no-cache --no-deps .
 
+# Cellpose-SAM weights (cpsam_v2, 1.2 GB), fetched at build time: Cellpose 4
+# loads them whatever cellpose_model_type says, and would otherwise download
+# them into ~/.cellpose on first use, which needs network and a writable home.
+ENV CELLPOSE_LOCAL_MODELS_PATH=/opt/cellpose/models
+RUN python3 -c "from cellpose.models import cache_model_path; print(cache_model_path('cpsam_v2'))" && \
+    chmod -R a+rX /opt/cellpose
+
+# Fallback cache folders: a non-root container user usually has no writable
+# home. MerXen's own code points both at the task folder where it can.
+ENV MPLCONFIGDIR=/tmp/matplotlib \
+    NUMBA_CACHE_DIR=/tmp/numba
+
 CMD ["python3"]
