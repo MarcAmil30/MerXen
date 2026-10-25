@@ -10,4 +10,10 @@ ENV PATH=/opt/conda/envs/merxen-mender/bin:$PATH \
     PYTHONPATH=/opt/merxen/src \
     CUDA_VISIBLE_DEVICES=""
 
+# Fallback cache folders (pynndescent compiles with numba): a non-root
+# container user usually has no writable home. The MENDER processes point both
+# at the task folder.
+ENV MPLCONFIGDIR=/tmp/matplotlib \
+    NUMBA_CACHE_DIR=/tmp/numba
+
 CMD ["python"]

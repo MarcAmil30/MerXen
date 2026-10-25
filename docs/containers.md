@@ -45,6 +45,20 @@ passed to Cellpose (`--cellpose_gpu true`) and GPU clustering
 
 Nextflow 25.04 or newer is needed (nf-schema 2.5.1); 26.04.0 is tested.
 
+## Model weights in the images
+
+Weights that the tools would otherwise download into the home folder on first
+use are fetched at build time, so a task needs no network and no writable home:
+
+| Image | Weights | Size | Found through |
+|---|---|---|---|
+| `merxen` | Cellpose-SAM `cpsam_v2` (Cellpose 4 always loads it) | 1.2 GB | `CELLPOSE_LOCAL_MODELS_PATH=/opt/cellpose/models` |
+| `merxen-alignment` | Kornia DISK `depth-save.pth`, LightGlue `disk_lightglue_v0-1_arxiv-pth` (VALIS feature matching) | 52 MB | `TORCH_HOME=/opt/torch` |
+
+These are the files the CREATE runs downloaded (byte-identical). All four
+images also set `MPLCONFIGDIR` and `NUMBA_CACHE_DIR` under `/tmp` as a
+fallback; MerXen's own code points them at the task folder where it can.
+
 ## What each task can see
 
 Every stage gets its input files as Nextflow `path` inputs, and each stage
