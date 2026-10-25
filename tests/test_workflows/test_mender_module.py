@@ -86,7 +86,7 @@ def test_mender_process_graph_is_isolated_and_cpu_only() -> None:
     assert "mender_prepared_ch = MENDER_PREPARE" in main_text
     assert "mender_computed_ch = MENDER_COMPUTE" in main_text
     assert "mender_finalized_ch = MENDER_FINALIZE" in main_text
-    assert "MENDER_IMPORT(mender_finalized_ch)" in main_text
+    assert "MENDER_IMPORT(mender_import_current_ch.mix(mender_import_published_ch))" in main_text
     compute_block = module_text[
         module_text.index("process MENDER_COMPUTE") : module_text.index(
             "process MENDER_FINALIZE"
@@ -104,7 +104,7 @@ def test_mender_process_graph_is_isolated_and_cpu_only() -> None:
     assert "mender_container" in config_text
     assert '"${params.outdir}/${pair_id}/${segmentation}/mender"' in module_text
     assert 'pattern: "mender_out/**"' in module_text
-    assert 'path("spatialdata_import_manifest.json")' in module_text
+    assert 'path("mender_publish/**/spatialdata_import_manifest.json")' in module_text
 
 
 def test_mender_uses_per_pair_release_and_independent_acquisition_tasks() -> None:
@@ -126,7 +126,7 @@ def test_mender_uses_per_pair_release_and_independent_acquisition_tasks() -> Non
         assert expected in main_text
     mender_block = main_text[
         main_text.index("pair_terminal_specs_ch") : main_text.index(
-            "MENDER_IMPORT(mender_finalized_ch)"
+            "MENDER_IMPORT(mender_import_current_ch.mix(mender_import_published_ch))"
         )
     ]
     assert "gaston" not in mender_block.lower()
