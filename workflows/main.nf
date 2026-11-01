@@ -3539,24 +3539,6 @@ workflow {
     clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(clustering_prepared_ch, clustering_reference_ch)
     clustering_results_ch = CLUSTERING_SQUIDPY_FINALIZE(clustering_computed_ch)
 
-    // Terminal analyses live in their own workflow because Nextflow stores
-    // each workflow body as a single JVM string constant, which is capped at
-    // 65535 characters. The combined body exceeded that limit.
-    TERMINAL_ANALYSES(
-        sample_rows_ch,
-        clustering_results_ch,
-        downstream_zarrs_ch,
-    )
-}
-
-
-workflow TERMINAL_ANALYSES {
-    take:
-    sample_rows_ch
-    clustering_results_ch
-    downstream_zarrs_ch
-
-    main:
     // Cortical depth runs after clustering so the per-cell broad_class and
     // subcluster_label annotations exist and its depth violin plots can be
     // produced. The distance-from-object branch consumes its tissue-region
