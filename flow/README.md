@@ -1,6 +1,6 @@
 # Flow.bio
 
-`flow/schema/main.json` is the Flow.bio pipeline schema: the run form Flow
+`flow/schema/merxen.json` is the Flow.bio pipeline schema: the run form Flow
 shows and how it maps onto MerXen's params. It follows the format of Flow's
 own pipelines (for example `goodwright/differential-analysis`,
 `flow/schema/main.json`). Every field it uses, at every level (sections,
@@ -27,6 +27,21 @@ pipelines public on app.flow.bio (checked through Flow's API, 2026-10-25).
 A section is not one of Flow's sample types (ChIP-Seq, CLIP, Hi-C, Ribo-Seq,
 RNA-Seq, scRNA-Seq on app.flow.bio), so the form takes rows directly
 (`takes_samples: false`), as Flow's own `Scdownstream` pipeline does.
+
+## Registering on Flow
+
+One repo, one pipeline. Add a version with:
+
+| Field | Value |
+|---|---|
+| Path | `workflows/main.nf` |
+| Schema | `flow/schema/merxen.json` |
+| Config | not needed: the root `nextflow.config` is read anyway |
+
+The schema is named after the pipeline, as in `goodwright/rnaseq`
+(`flow/schema/rnaseq.json`). `workflows/main.nf` keeps its upstream name.
+Leave the four pipeline properties (nf-core, demultiplex, prepares genome,
+imports samples) unticked.
 
 ## Not covered yet
 
