@@ -11,14 +11,39 @@ tmp="${dest}.unpack"
 rm -rf "$tmp" "$dest"
 mkdir -p "$tmp"
 python3 - "$archive" "$tmp" <<'PY'
-import sys, tarfile, zipfile
+import os, sys, tarfile, zipfile
 archive, out = sys.argv[1], sys.argv[2]
+
+
+def inside(base, path):
+    path = os.path.realpath(path)
+    return path == base or path.startswith(base + os.sep)
+
+
 if zipfile.is_zipfile(archive):
     with zipfile.ZipFile(archive) as zf:
         zf.extractall(out)
 else:
     with tarfile.open(archive) as tf:
-        tf.extractall(out, filter="data")
+        try:
+            tf.extractall(out, filter="data")
+        except TypeError:
+            # Python without tarfile extraction filters (before 3.12 and the
+            # 3.8-3.11 security releases): check each member the way the
+            # "data" filter would before extracting.
+            base = os.path.realpath(out)
+            for m in tf.getmembers():
+                dest = os.path.join(out, m.name)
+                bad = (
+                    os.path.isabs(m.name)
+                    or not inside(base, dest)
+                    or m.isdev()
+                    or (m.issym() and not inside(base, os.path.join(os.path.dirname(dest), m.linkname)))
+                    or (m.islnk() and not inside(base, os.path.join(out, m.linkname)))
+                )
+                if bad:
+                    sys.exit(f"merxen-unpack-raw: unsafe member in {archive}: {m.name}")
+            tf.extractall(out)
 PY
 mapfile -t top < <(find "$tmp" -mindepth 1 -maxdepth 1 ! -name "__MACOSX")
 if [[ ${#top[@]} -eq 1 && -d ${top[0]} ]]; then
