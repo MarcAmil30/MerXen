@@ -1,0 +1,32 @@
+{
+  "inputs": [
+    {
+      "name": "Test input",
+      "advanced": false,
+      "description": "Checks that Flow runs a task inside an Apptainer container and stages a Flow data file into it.",
+      "params": {
+        "input_file": {
+          "name": "Any small file",
+          "type": "data",
+          "required": true,
+          "description": "Any uploaded file, for example region_R1.tar.gz. The task only counts its bytes."
+        },
+        "image": {
+          "name": "Container image",
+          "type": "string",
+          "default": "python:3.12-slim",
+          "required": false,
+          "description": "Image to run the task in. Without a scheme it is pulled as docker://<name>."
+        }
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "Apptainer report",
+      "process": "APPTAINER_HELLO",
+      "pattern": "apptainer_hello\\.txt$",
+      "description": "Nextflow version, container image, OS and Python seen inside the task."
+    }
+  ]
+}
