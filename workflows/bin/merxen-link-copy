@@ -22,6 +22,12 @@ if ! cp -R -P --link "$src/." "$dst/" 2>/dev/null; then
     # start again, so cp never writes into a file still linked to the original
     rm -rf "$dst"
     mkdir "$dst"
-    cp -R -P --preserve=mode,timestamps "$src/." "$dst/"
+    if ! cp -R -P --preserve=mode,timestamps "$src/." "$dst/" 2>/dev/null; then
+        # some filesystems (CephFS with ACLs, inside a rootless container)
+        # refuse even mode bits; the store needs no particular modes
+        rm -rf "$dst"
+        mkdir "$dst"
+        cp -R -P "$src/." "$dst/"
+    fi
 fi
 find "$dst" -type f -links +1 -exec chmod a-w {} +
