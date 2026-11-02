@@ -382,6 +382,13 @@
           "required": false,
           "description": "Register the MERSCOPE and Xenium sections into one coordinate frame (VALIS)."
         },
+        "spatial_gene_analysis_enabled": {
+          "name": "Spatial gene analysis",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "Spatial autocorrelation and distance-to-boundary statistics. Needs each section's pial-boundary and tissue-edge GeoJSON annotations; leave off without them."
+        },
         "cellpose_gpu": {
           "name": "Cellpose on GPU",
           "type": "boolean",
@@ -408,6 +415,13 @@
           "type": "number",
           "required": false,
           "description": "Memory budget used to tile Cellpose and size other stages."
+        },
+        "mender_radius_um": {
+          "name": "MENDER radius (\u00b5m)",
+          "type": "number",
+          "default": 20.0,
+          "required": false,
+          "description": "Neighbourhood radius MENDER uses to build spatial domains. 50 suits Xenium brain sections."
         }
       }
     },
@@ -577,6 +591,30 @@
       "process": "ALIGN",
       "pattern": "alignment_transform\\.json$",
       "description": "Transform from the moving to the fixed section."
+    },
+    {
+      "name": "Cell types on tissue",
+      "process": "CLUSTERING_SQUIDPY_COMPUTE",
+      "pattern": "_broad_spatial\\.png$",
+      "description": "Each cell coloured by its broad cell class, drawn on the section."
+    },
+    {
+      "name": "Cell type UMAP",
+      "process": "CLUSTERING_SQUIDPY_COMPUTE",
+      "pattern": "_broad_umap\\.png$",
+      "description": "UMAP of all cells coloured by broad cell class."
+    },
+    {
+      "name": "Spatial domains on tissue",
+      "process": "TERMINAL_ANALYSES:MENDER_FINALIZE",
+      "pattern": "spatial_domains\\.png$",
+      "description": "MENDER spatial domains drawn on the section."
+    },
+    {
+      "name": "Spatial domain UMAP",
+      "process": "TERMINAL_ANALYSES:MENDER_FINALIZE",
+      "pattern": "context_umap\\.png$",
+      "description": "UMAP of cell neighbourhoods coloured by MENDER domain."
     }
   ]
 }
