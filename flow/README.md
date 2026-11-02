@@ -36,7 +36,7 @@ One repo, one pipeline. Add a version with:
 |---|---|
 | Path | `workflows/main.nf` |
 | Schema | `flow/schema/merxen.json` |
-| Config | not needed: the root `nextflow.config` is read anyway |
+| Config | `flow/conf/merxen.config`: runs every stage in its Apptainer image (Flow passes no `-profile`) |
 
 The schema is named after the pipeline, as in `goodwright/rnaseq`
 (`flow/schema/rnaseq.json`). `workflows/main.nf` keeps its upstream name.

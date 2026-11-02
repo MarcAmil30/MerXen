@@ -503,9 +503,9 @@
         "container_registry": {
           "name": "Registry",
           "type": "string",
-          "default": "ghcr.io/bourdenxlab",
+          "default": "oras://ghcr.io/marcamil30",
           "required": false,
-          "description": "Images are <registry>/<image>:<tag>."
+          "description": "Images are <registry>/<image>:<tag>. oras:// pulls the Apptainer .sif images from GHCR."
         },
         "container_tag": {
           "name": "Tag",
