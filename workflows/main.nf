@@ -27,6 +27,7 @@ include {
     clusteringReferenceInputs
 } from "./modules/clustering_squidpy"
 include { MAPMYCELLS; mapMyCellsReferenceInputs } from "./modules/mapmycells"
+include { ANNOTATION_FIGURES } from "./modules/annotation_figures"
 include {
     MENDER_PREPARE;
     MENDER_COMPUTE;
@@ -4478,4 +4479,25 @@ workflow TERMINAL_ANALYSES {
         }
 
     MENDER_IMPORT(mender_import_current_ch.mix(mender_import_published_ch))
+
+    // Figures from MapMyCells (cell names) and MENDER (domains) for every
+    // platform and segmentation both stages ran on in this run.
+    if (params.annotation_figures_enabled.toString().toLowerCase() == "true") {
+        annotation_figures_inputs_ch = mender_finalized_ch
+            .map {
+                _taskKey, pairId, segmentation, platform, sampleId, _spatialdataPath,
+                _sourceTable, _shapeKey, _sourceH5ad, _menderConfig, finalizedDir ->
+                    tuple([pairId, segmentation], platform, sampleId, finalizedDir)
+            }
+            .combine(
+                mapmycells_results_ch.map { pairId, segmentation, mapmycellsDir ->
+                    tuple([pairId, segmentation], mapmycellsDir)
+                },
+                by: 0
+            )
+            .map { key, platform, sampleId, finalizedDir, mapmycellsDir ->
+                tuple(key[0], key[1], platform, sampleId, mapmycellsDir, finalizedDir)
+            }
+        ANNOTATION_FIGURES(annotation_figures_inputs_ch)
+    }
 }

@@ -168,6 +168,30 @@
   ],
   "outputs": [
     {
+      "name": "Cell types by marker genes",
+      "process": "TERMINAL_ANALYSES:ANNOTATION_FIGURES",
+      "pattern": "_celltypes_markers\\.png$",
+      "description": "Each cell coloured by the cell type its cluster's marker genes point to."
+    },
+    {
+      "name": "Cell types on tissue (Allen atlas)",
+      "process": "TERMINAL_ANALYSES:ANNOTATION_FIGURES",
+      "pattern": "_celltypes_allen\\.png$",
+      "description": "Each cell named by MapMyCells against the Allen atlas, and how many of each type."
+    },
+    {
+      "name": "Tissue domains on tissue",
+      "process": "TERMINAL_ANALYSES:ANNOTATION_FIGURES",
+      "pattern": "_tissue_domains\\.png$",
+      "description": "MENDER domains on the section, each domain's size and the cell type that dominates it."
+    },
+    {
+      "name": "Annotation summary",
+      "process": "TERMINAL_ANALYSES:ANNOTATION_FIGURES",
+      "pattern": "_annotation_summary\\.json$",
+      "description": "The counts behind the three annotation figures."
+    },
+    {
       "name": "Platform comparison tables",
       "process": "COMPARE",
       "pattern": "_compare\\.csv$",
