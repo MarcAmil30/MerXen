@@ -1,0 +1,255 @@
+{
+  "inputs": [
+    {
+      "name": "Samples",
+      "advanced": false,
+      "description": "One row per tissue section. For Xenium, add the sample name and its .tar.gz.",
+      "params": {
+        "samplesheet": {
+          "name": "Sections",
+          "type": "csv",
+          "required": true,
+          "takes_samples": false,
+          "allow_custom_columns": false,
+          "columns": [
+            {
+              "name": "pair_id",
+              "type": "string",
+              "render": true,
+              "required": true,
+              "description": "Sample name. Used to name every result."
+            },
+            {
+              "name": "xenium_dir",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "description": "Raw Xenium output bundle (outs/), uploaded as one .tar, .tar.gz, .tgz or .zip."
+            },
+            {
+              "name": "merscope_dir",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "description": "Only for MERSCOPE or paired mode: raw MERSCOPE region export as one archive."
+            },
+            {
+              "name": "merscope_transform_path",
+              "type": "data",
+              "render": true,
+              "required": false,
+              "description": "Only for MERSCOPE: micron-to-mosaic transform.",
+              "pattern": "json|csv"
+            },
+            {
+              "name": "merscope_z_range",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "description": "Only for MERSCOPE: z planes to use, e.g. 1-2. Blank uses 0-6."
+            },
+            {
+              "name": "merscope_channels",
+              "type": "string",
+              "render": true,
+              "required": false,
+              "description": "Only for MERSCOPE: image channels. Blank uses DAPI,PolyT."
+            }
+          ],
+          "description": "Each row runs the whole pipeline: segmentation, QC, MECR, clustering, MapMyCells cell types and MENDER spatial domains."
+        }
+      }
+    },
+    {
+      "name": "Pipeline options",
+      "advanced": false,
+      "description": "Preset for Xenium human brain on this server. Change only if your data differ.",
+      "params": {
+        "analysis_mode": {
+          "name": "Analysis mode",
+          "type": "string",
+          "valid": [
+            "xenium",
+            "merscope",
+            "paired"
+          ],
+          "default": "xenium",
+          "required": true,
+          "description": "Which platform each section has. paired needs both a MERSCOPE and a Xenium export."
+        },
+        "species": {
+          "name": "Species",
+          "type": "string",
+          "valid": [
+            "human",
+            "mouse"
+          ],
+          "default": "human",
+          "required": true,
+          "description": "Only the human brain atlas is installed on this server; mouse needs the mouse atlas first."
+        },
+        "xenium_channels": {
+          "name": "Xenium channels",
+          "type": "string",
+          "default": "0",
+          "required": false,
+          "description": "Image channel(s) Cellpose segments, comma-separated. 0 is DAPI (nuclei)."
+        },
+        "xenium_min_qv": {
+          "name": "Xenium min QV",
+          "type": "number",
+          "default": 20.0,
+          "required": false,
+          "description": "Drop transcripts with a quality score below this. 20 is the 10x standard."
+        },
+        "cellpose_gpu": {
+          "name": "Cellpose on GPU",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "This server has no GPU; leave off."
+        },
+        "clustering_squidpy_use_gpu": {
+          "name": "Clustering on GPU",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "This server has no GPU; leave off."
+        }
+      }
+    },
+    {
+      "name": "Advanced options",
+      "advanced": true,
+      "description": "Analysis settings. The presets suit Xenium brain sections.",
+      "params": {
+        "mapmycells_reference_mode": {
+          "name": "MapMyCells reference",
+          "type": "string",
+          "valid": [
+            "whole_brain",
+            "region",
+            "both"
+          ],
+          "default": "whole_brain",
+          "required": false,
+          "description": "whole_brain uses the installed atlas and takes minutes. region builds a frontal-cortex reference and adds about 2 hours (downloads about 38 GB)."
+        },
+        "analysis_segmentation": {
+          "name": "Segmentation",
+          "type": "string",
+          "default": "proseg_hybrid",
+          "required": false,
+          "description": "Cell boundaries the analyses use: proseg_hybrid, reseg, original_seg, proseg_mask, or all (comma-separated)."
+        },
+        "clustering_squidpy_leiden_resolution": {
+          "name": "Clustering resolution",
+          "type": "number",
+          "default": 0.5,
+          "required": false,
+          "description": "Higher gives more, smaller clusters."
+        },
+        "mender_radius_um": {
+          "name": "MENDER radius (µm)",
+          "type": "number",
+          "default": 50.0,
+          "required": false,
+          "description": "Neighbourhood size for spatial domains. Larger gives broader domains."
+        },
+        "enable_alignment": {
+          "name": "Align paired sections",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "Paired mode only: register MERSCOPE onto Xenium (VALIS)."
+        }
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "Platform comparison tables",
+      "process": "COMPARE",
+      "pattern": "_compare\\.csv$",
+      "description": "Per-gene counts on MERSCOPE against Xenium, raw and normalised."
+    },
+    {
+      "name": "Platform comparison metrics",
+      "process": "COMPARE",
+      "pattern": "_comparison_metrics\\.json$",
+      "description": "Summary of how well the two platforms agree."
+    },
+    {
+      "name": "Clustered cells",
+      "process": "CLUSTERING_SQUIDPY_FINALIZE",
+      "pattern": "_clustered\\.h5ad$",
+      "description": "AnnData with clusters and UMAP, one per platform and segmentation."
+    },
+    {
+      "name": "Cell types",
+      "process": "TERMINAL_ANALYSES:MAPMYCELLS",
+      "pattern": "_mapmycells\\.csv$",
+      "description": "Allen cell type and confidence for every cell."
+    },
+    {
+      "name": "Cell types (AnnData)",
+      "process": "TERMINAL_ANALYSES:MAPMYCELLS",
+      "pattern": "_mapmycells_annotated\\.h5ad$",
+      "description": "Clustered AnnData annotated with MapMyCells cell types."
+    },
+    {
+      "name": "Spatial domains",
+      "process": "TERMINAL_ANALYSES:MENDER_FINALIZE",
+      "pattern": "_mender_annotated\\.h5ad$",
+      "description": "AnnData with each cell's MENDER spatial domain."
+    },
+    {
+      "name": "MECR summary",
+      "process": "MECR",
+      "pattern": "_mecr_summary\\.csv$",
+      "description": "Mutually exclusive co-expression rate: a segmentation error measure."
+    },
+    {
+      "name": "Spatial gene autocorrelation",
+      "process": "SPATIAL_GENE_ANALYSIS",
+      "pattern": "_spatial_gene_autocorrelation\\.csv$",
+      "description": "Genes whose positions are more clustered or spread than chance."
+    },
+    {
+      "name": "Figures",
+      "process": "VISUALIZE",
+      "filetype": "pdf",
+      "description": "Per-segmentation figures for both platforms."
+    },
+    {
+      "name": "Alignment transform",
+      "process": "ALIGN",
+      "pattern": "alignment_transform\\.json$",
+      "description": "Transform from the moving to the fixed section."
+    },
+    {
+      "name": "Cell types on tissue",
+      "process": "CLUSTERING_SQUIDPY_COMPUTE",
+      "pattern": "_broad_spatial\\.png$",
+      "description": "Each cell coloured by its broad cell class, drawn on the section."
+    },
+    {
+      "name": "Cell type UMAP",
+      "process": "CLUSTERING_SQUIDPY_COMPUTE",
+      "pattern": "_broad_umap\\.png$",
+      "description": "UMAP of all cells coloured by broad cell class."
+    },
+    {
+      "name": "Spatial domains on tissue",
+      "process": "TERMINAL_ANALYSES:MENDER_FINALIZE",
+      "pattern": "spatial_domains\\.png$",
+      "description": "MENDER spatial domains drawn on the section."
+    },
+    {
+      "name": "Spatial domain UMAP",
+      "process": "TERMINAL_ANALYSES:MENDER_FINALIZE",
+      "pattern": "context_umap\\.png$",
+      "description": "UMAP of cell neighbourhoods coloured by MENDER domain."
+    }
+  ]
+}

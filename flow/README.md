@@ -38,6 +38,28 @@ One repo, one pipeline. Add a version with:
 | Schema | `flow/schema/merxen.json` |
 | Config | `flow/conf/merxen.config`: runs every stage in its Apptainer image (Flow passes no `-profile`) |
 
+### Simple version (0.2, branch `feat/flow-simple`)
+
+The same pipeline with a short form for users: the sample name and its
+Xenium .tar.gz, plus presets (analysis mode, species, channels, min QV, GPU)
+and an advanced section (MapMyCells reference, segmentation, clustering
+resolution, MENDER radius, alignment).
+
+| Field | Value |
+|---|---|
+| Git reference | `feat/flow-simple` |
+| Path | `workflows/main.nf` |
+| Schema | `flow/schema/merxen_simple.json` |
+| Config | `flow/conf/merxen_simple.config` |
+
+`merxen_simple.config` includes `merxen.config` and fixes the rest: every run
+goes from `build_spatialdata` to `mender` with MECR and MENDER on, and the
+three GeoJSON stages off. MapMyCells defaults to `whole_brain`, which uses the
+uploaded precomputed stats; `region` and `both` download about 38 GB from
+Allen and build a frontal reference on every run. The Allen files come from
+`flow/conf/staging3.config` (paths under `/media/storage/staging3/uploads/`);
+another Flow server needs its own copy of that file.
+
 The schema is named after the pipeline, as in `goodwright/rnaseq`
 (`flow/schema/rnaseq.json`). `workflows/main.nf` keeps its upstream name.
 Leave the four pipeline properties (nf-core, demultiplex, prepares genome,

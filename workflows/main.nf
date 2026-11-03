@@ -349,7 +349,7 @@ def segmentMetaForPlatform(row, platform, params) {
 
     if (platform == "XENIUM") {
         return [
-            channels: parseChannels(row.xenium_channels, ["DAPI", "18S"]),
+            channels: parseChannels(row.xenium_channels, parseChannels(params.xenium_channels, ["DAPI", "18S"])),
             image_prefix: null,
             z_range: null,
             min_qv: floatOrDefault(row.xenium_min_qv, params.xenium_min_qv),
