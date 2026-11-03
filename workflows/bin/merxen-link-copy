@@ -17,6 +17,9 @@ set -euo pipefail
 src=$1
 dst=$2
 
+# a task Slurm ran twice in one work folder (sbatch timed out after
+# submitting, Nextflow submitted again) finds dst already there
+rm -rf "$dst"
 mkdir "$dst"
 if ! cp -R -P --link "$src/." "$dst/" 2>/dev/null; then
     # start again, so cp never writes into a file still linked to the original
