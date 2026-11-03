@@ -739,9 +739,14 @@ def segmentMetaForPlatform(row, platform, params) {
 
     if (platform == "XENIUM") {
         return extra + [
+            // the row, else the run-wide params.xenium_channels, else the
+            // platform default
             channels: parseChannels(
                 row.xenium_channels,
-                PlatformSpec.forName(platform).defaultChannels
+                parseChannels(
+                    params.xenium_channels,
+                    PlatformSpec.forName(platform).defaultChannels
+                )
             ),
             image_prefix: null,
             z_range: null,
