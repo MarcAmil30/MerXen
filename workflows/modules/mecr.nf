@@ -8,7 +8,23 @@ def mecrReferenceInputs(referenceAtlas) {
             .collect { path -> path.toString().trim() }
             .findAll { path -> path }
     def whb = referenceAtlas == "whb"
+    def countTablePath = params.mecr_count_table_path ?: (whb ? params.mecr_whb_count_table_path : null)
+    if (countTablePath) {
+        // The count table replaces the raw atlas and its metadata, so only it
+        // is staged. The cache path stays relative and unused, so not staged.
+        return [
+            count_table_path: countTablePath.toString(),
+            neurons_h5ad_path: null,
+            nonneurons_h5ad_path: null,
+            cell_metadata_path: null,
+            taxonomy_metadata_path: null,
+            cluster_membership_path: null,
+            reference_cache_dir: "mapmycells_cache",
+            reference_h5ad_paths: [],
+        ]
+    }
     def inputs = [
+        count_table_path: null,
         neurons_h5ad_path: params.mecr_neurons_h5ad_path ?: (whb ? params.mecr_whb_neurons_h5ad_path : null),
         nonneurons_h5ad_path: params.mecr_nonneurons_h5ad_path ?: (whb ? params.mecr_whb_nonneurons_h5ad_path : null),
         cell_metadata_path: params.mecr_cell_metadata_path ?: (whb ? params.mecr_whb_cell_metadata_path : null),
@@ -49,6 +65,7 @@ process MECR_REFERENCE {
 {
   "output_dir": "mecr_reference_out",
   "samples": ${samples_json},
+  "count_table_path": ${groovy.json.JsonOutput.toJson(reference_inputs.count_table_path)},
   "reference_atlas": ${groovy.json.JsonOutput.toJson(reference_atlas)},
   "reference_h5ad_paths": ${groovy.json.JsonOutput.toJson(reference_inputs.reference_h5ad_paths)},
   "neurons_h5ad_path": ${groovy.json.JsonOutput.toJson(reference_inputs.neurons_h5ad_path)},

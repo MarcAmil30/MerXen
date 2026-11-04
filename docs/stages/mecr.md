@@ -104,6 +104,37 @@ It can also be selected alone with `--only_stage mecr`, provided the published
 `latest_spatialdata.zarr` inputs already exist. A samplesheet `mecr_enabled`
 column overrides the global switch per row.
 
+### Precomputed count table
+
+Reference preparation spends almost all its time reading the raw atlas
+(about 27 minutes for WHB, whether the panel has 10 or 300 genes). Marker
+selection only needs, per gene and broad class, how many atlas cells detect
+the gene, so that can be computed once for every gene:
+
+```bash
+merxen mecr-count-table \
+    --h5ad WHB-10Xv3-Neurons-raw.h5ad \
+    --h5ad WHB-10Xv3-Nonneurons-raw.h5ad \
+    --cell-metadata cell_metadata.csv \
+    --taxonomy-metadata cluster_annotation_term.csv \
+    --cluster-membership cluster_to_cluster_annotation_membership.csv \
+    --output whb_mecr_counts.parquet
+```
+
+For WHB this takes about 20 minutes and writes a 1.8 MB Parquet file covering
+58,343 gene symbols and all 12 broad classes. Pass it with
+`--mecr_whb_count_table_path` (or `--mecr_count_table_path`), and
+`MECR_REFERENCE` reads it instead of the atlas, taking seconds. Markers and
+detection fractions are identical to the raw-atlas route for any panel,
+threshold or subset of the counted classes. The table records the atlas,
+taxonomy level and gene symbol column it was built with, and the stage refuses
+a table whose settings differ from the run's.
+
+Two outputs are not available in this mode: the Wilcoxon columns of
+`mecr_reference_gene_statistics.csv` are empty, and the atlas-baseline
+`mecr_reference_pairs.csv` is written with headers only. Neither feeds sample
+scoring.
+
 ## Main parameters
 
 | Parameter | Default | Purpose |
@@ -115,6 +146,7 @@ column overrides the global switch per row.
 | `mecr_cell_metadata_path` | atlas-dependent | Maps reference cell labels to cluster aliases. |
 | `mecr_taxonomy_metadata_path` | atlas-dependent | Resolves taxonomy labels. |
 | `mecr_cluster_membership_path` | atlas-dependent | Maps cluster aliases to the selected taxonomy level. |
+| `mecr_count_table_path` / `mecr_whb_count_table_path` | `null` | Precomputed count table from `merxen mecr-count-table`; replaces every raw atlas input above. |
 | `mecr_reference_cache_dir` | `<outdir>/mapmycells_cache` | Durable cache for automatic WMB downloads. |
 | `mecr_auto_download_reference` | `true` | Download or reuse every complete WMB reference input for mouse. |
 | `mecr_marker_min_target_fraction` | `0.25` | Strict lower detection threshold in the target class. |

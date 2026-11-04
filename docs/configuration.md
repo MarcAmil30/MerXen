@@ -507,6 +507,7 @@ mode, output layout, and CPU container instructions.
 | `mecr_cell_metadata_path` | Atlas-dependent | Maps raw H5AD cell labels to cluster aliases. |
 | `mecr_taxonomy_metadata_path` | Atlas-dependent | Resolves taxonomy node labels. |
 | `mecr_cluster_membership_path` | Atlas-dependent | Maps cluster aliases to taxonomy nodes. |
+| `mecr_count_table_path` / `mecr_whb_count_table_path` | `null` | Precomputed atlas count table (`merxen mecr-count-table`). When set, MECR reference preparation reads it instead of the raw H5ADs and takes seconds. See `docs/stages/mecr.md`. |
 | `mecr_reference_cache_dir` | `<outdir>/mapmycells_cache` | Durable Allen reference cache. The Dwight profile uses `/media/mathieubo/SSD1/MerXen/mapmycells`. |
 | `mecr_auto_download_reference` | `true` | For mouse, download or reuse the complete WMB raw reference and metadata. Downloads are resumable and use four concurrent transfers. |
 | `mecr_taxonomy_level` | atlas-dependent | `CCN202210140_SUPC` for WHB or `CCN20230722_CLAS` for WMB. |

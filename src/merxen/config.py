@@ -1299,11 +1299,23 @@ class MecrSampleConfig(BaseModel):
     table_key: str | None = None
 
 
+MECR_DEFAULT_TAXONOMY_LEVELS: dict[str, str] = {
+    "whb": "CCN202210140_SUPC",
+    "wmb": "CCN20230722_CLAS",
+}
+
+
 class MecrReferenceConfig(BaseModel):
-    """Configuration for paper-standard whole-brain MECR marker discovery."""
+    """Configuration for paper-standard whole-brain MECR marker discovery.
+
+    When ``count_table_path`` is set, markers are read from a precomputed
+    gene x broad-class detection-count table (``merxen mecr-count-table``)
+    instead of streaming the raw atlas H5AD files on every run.
+    """
 
     output_dir: Path
     samples: list[MecrSampleConfig]
+    count_table_path: Path | None = None
     reference_atlas: Literal["whb", "wmb"] = "whb"
     reference_h5ad_paths: list[Path] = Field(default_factory=list)
     neurons_h5ad_path: Path | None = None
@@ -1328,11 +1340,7 @@ class MecrReferenceConfig(BaseModel):
         if not self.samples:
             raise ValueError("MecrReferenceConfig requires at least one sample")
         if self.taxonomy_level is None:
-            self.taxonomy_level = (
-                "CCN20230722_CLAS"
-                if self.reference_atlas == "wmb"
-                else "CCN202210140_SUPC"
-            )
+            self.taxonomy_level = MECR_DEFAULT_TAXONOMY_LEVELS[self.reference_atlas]
         if not self.target_broad_classes:
             self.target_broad_classes = (
                 [

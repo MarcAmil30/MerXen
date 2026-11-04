@@ -1356,6 +1356,17 @@ def appendMecrPreflightChecks(errors, settings, params) {
         return
     }
     def referenceAtlas = settings.species == "mouse" ? "wmb" : "whb"
+    def countTablePath = params.mecr_count_table_path ?:
+        (referenceAtlas == "whb" ? params.mecr_whb_count_table_path : null)
+    if (!isBlankPath(countTablePath)) {
+        // The count table replaces every raw atlas input.
+        appendPreflightFileCheck(
+            errors,
+            countTablePath,
+            "MECR ${referenceAtlas.toUpperCase()} count table",
+        )
+        return
+    }
     def autoDownloadReference = boolOrDefault(
         params.mecr_auto_download_reference,
         true,

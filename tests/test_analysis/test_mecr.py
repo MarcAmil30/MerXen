@@ -2,26 +2,34 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from click.testing import CliRunner
 from scipy import sparse
 
 from merxen.analysis.mecr import (
+    build_mecr_count_table,
     compute_mecr_pair_metrics,
+    discover_markers_from_count_table,
     discover_reference_markers,
+    load_atlas_broad_classes,
     load_atlas_panel_reference,
     load_whb_panel_reference,
     plot_class_pair_mecr_heatmaps,
     plot_platform_mecr_comparison,
     plot_reference_mecr_histogram,
+    read_mecr_count_table,
     run_mecr,
+    run_mecr_reference,
     select_barnyard_pairs,
     summarize_mecr_pair_metrics,
 )
+from merxen.cli.run_mecr import mecr_count_table_command
 from merxen.config import MecrConfig, MecrReferenceConfig, MecrSampleConfig
 
 
@@ -442,3 +450,269 @@ def test_load_wmb_panel_reference_streams_all_expression_shards(
         result.uns["merxen_mecr_reference"]["n_raw_cells_without_taxonomy_metadata"]
         == 1
     )
+
+
+def _write_whb_atlas_fixture(tmp_path: Path) -> MecrReferenceConfig:
+    """Write a two-shard WHB-shaped atlas with known markers.
+
+    GeneA is a neuron marker, GeneB (split over two columns) an astrocyte
+    marker, GeneC is detected everywhere, and two Splatter cells sit outside
+    the target classes.
+    """
+    var = pd.DataFrame(
+        {"gene_symbol": ["GeneA", "GeneB", "GeneB", "GeneC"]},
+        index=["ENSG1", "ENSG2", "ENSG3", "ENSG4"],
+    )
+    neurons = np.array(
+        [[1, 0, 0, 1], [2, 0, 0, 1], [1, 0, 0, 1], [3, 0, 0, 1], [0, 0, 0, 1]]
+    )
+    nonneurons = np.array(
+        [
+            [0, 1, 0, 1],
+            [0, 0, 2, 1],
+            [0, 1, 1, 1],
+            [0, 0, 1, 0],
+            [0, 1, 0, 0],
+            [4, 4, 0, 4],
+            [1, 0, 0, 0],
+        ]
+    )
+    neuron_cells = [f"neuron_{index}" for index in range(5)]
+    nonneuron_cells = [f"astro_{index}" for index in range(5)] + [
+        "splatter_0",
+        "splatter_1",
+    ]
+    neurons_path = tmp_path / "neurons.h5ad"
+    nonneurons_path = tmp_path / "nonneurons.h5ad"
+    ad.AnnData(
+        X=sparse.csr_matrix(neurons),
+        obs=pd.DataFrame(index=neuron_cells),
+        var=var,
+    ).write_h5ad(neurons_path)
+    ad.AnnData(
+        X=sparse.csr_matrix(nonneurons),
+        obs=pd.DataFrame(index=nonneuron_cells),
+        var=var,
+    ).write_h5ad(nonneurons_path)
+
+    aliases = {"neuron": "1", "astro": "2", "splatter": "3"}
+    cell_metadata_path = tmp_path / "cell_metadata.csv"
+    pd.DataFrame(
+        {
+            "cell_label": neuron_cells + nonneuron_cells,
+            "cluster_alias": [
+                aliases[cell.split("_")[0]] for cell in neuron_cells + nonneuron_cells
+            ],
+        }
+    ).to_csv(cell_metadata_path, index=False)
+    taxonomy_path = tmp_path / "taxonomy.csv"
+    pd.DataFrame(
+        {
+            "label": ["neuron_label", "astro_label", "splatter_label"],
+            "name": ["Upper-layer intratelencephalic", "Astrocyte", "Splatter"],
+            "cluster_annotation_term_set_label": ["SUPC", "SUPC", "SUPC"],
+        }
+    ).to_csv(taxonomy_path, index=False)
+    membership_path = tmp_path / "membership.csv"
+    pd.DataFrame(
+        {
+            "cluster_annotation_term_label": [
+                "neuron_label",
+                "astro_label",
+                "splatter_label",
+            ],
+            "cluster_annotation_term_set_label": ["SUPC", "SUPC", "SUPC"],
+            "cluster_alias": ["1", "2", "3"],
+        }
+    ).to_csv(membership_path, index=False)
+    return MecrReferenceConfig(
+        output_dir=tmp_path / "out",
+        samples=[
+            MecrSampleConfig(
+                sample_id="sample",
+                platform="XENIUM",
+                zarr_path=tmp_path / "unused.zarr",
+            )
+        ],
+        neurons_h5ad_path=neurons_path,
+        nonneurons_h5ad_path=nonneurons_path,
+        cell_metadata_path=cell_metadata_path,
+        taxonomy_metadata_path=taxonomy_path,
+        cluster_membership_path=membership_path,
+        taxonomy_level="SUPC",
+        target_broad_classes=["Neurons", "Astrocytes"],
+        reference_chunk_rows=2,
+    )
+
+
+def _build_fixture_count_table(
+    config: MecrReferenceConfig,
+    output_path: Path,
+) -> Path:
+    assert config.cell_metadata_path is not None
+    assert config.taxonomy_metadata_path is not None
+    assert config.cluster_membership_path is not None
+    assert config.neurons_h5ad_path is not None
+    assert config.nonneurons_h5ad_path is not None
+    class_by_cell = load_atlas_broad_classes(
+        config.cell_metadata_path,
+        config.taxonomy_metadata_path,
+        config.cluster_membership_path,
+        taxonomy_level="SUPC",
+        reference_atlas="whb",
+    )
+    return build_mecr_count_table(
+        [config.neurons_h5ad_path, config.nonneurons_h5ad_path],
+        class_by_cell,
+        output_path,
+        reference_atlas="whb",
+        taxonomy_level="SUPC",
+        chunk_rows=3,
+    )
+
+
+PANEL_GENES = ["GeneA", "geneb", "GeneC", "MissingGene"]
+
+
+def test_count_table_markers_match_raw_atlas_route(tmp_path: Path) -> None:
+    """The count table must reproduce the raw-atlas statistics and markers."""
+    config = _write_whb_atlas_fixture(tmp_path)
+    reference = load_atlas_panel_reference(config, panel_genes=PANEL_GENES)
+    raw_statistics, raw_markers = discover_reference_markers(
+        reference,
+        class_key="broad_class",
+        target_classes=config.target_broad_classes,
+    )
+    count_table = read_mecr_count_table(
+        _build_fixture_count_table(config, tmp_path / "counts.parquet")
+    )
+    table_statistics, table_markers = discover_markers_from_count_table(
+        count_table,
+        PANEL_GENES,
+        target_classes=config.target_broad_classes,
+    )
+
+    compared = [
+        "gene",
+        "broad_class",
+        "target_fraction",
+        "other_fraction",
+        "n_target_cells",
+        "n_other_cells",
+        "passes_detection_thresholds",
+        "qualifying_class_count",
+        "is_unique_marker",
+    ]
+    pd.testing.assert_frame_equal(
+        raw_statistics[compared], table_statistics[compared], check_dtype=False
+    )
+    pd.testing.assert_frame_equal(
+        raw_markers[["gene", "broad_class"]], table_markers[["gene", "broad_class"]]
+    )
+    assert list(table_markers["gene"]) == ["geneb", "GeneA"]
+    assert table_statistics["wilcoxon_score"].isna().all()
+
+
+def test_build_mecr_count_table_counts_every_class(tmp_path: Path) -> None:
+    """Non-target classes are kept and duplicate symbols collapse to one row."""
+    config = _write_whb_atlas_fixture(tmp_path)
+    count_table = read_mecr_count_table(
+        _build_fixture_count_table(config, tmp_path / "counts.parquet")
+    )
+
+    assert count_table.class_sizes == {"Astrocytes": 5, "Neurons": 5, "Splatter": 2}
+    assert list(count_table.counts["gene_token"]) == ["genea", "geneb", "genec"]
+    gene_b = count_table.counts.set_index("gene_token").loc["geneb"]
+    assert gene_b["Astrocytes"] == 5
+    assert gene_b["Splatter"] == 1
+    assert count_table.metadata["taxonomy_level"] == "SUPC"
+
+
+def test_run_mecr_reference_uses_count_table_without_atlas(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With a count table, the stage needs no raw atlas or metadata inputs."""
+    fixture = _write_whb_atlas_fixture(tmp_path)
+    table_path = _build_fixture_count_table(fixture, tmp_path / "counts.parquet")
+    monkeypatch.setattr(
+        "merxen.analysis.mecr.collect_spatial_panel_genes",
+        lambda _samples: PANEL_GENES,
+    )
+    config = MecrReferenceConfig(
+        output_dir=tmp_path / "reference_out",
+        samples=fixture.samples,
+        count_table_path=table_path,
+        taxonomy_level="SUPC",
+        target_broad_classes=["Neurons", "Astrocytes"],
+    )
+
+    outputs = run_mecr_reference(config)
+
+    assert all(path.exists() for path in outputs.values())
+    markers = pd.read_csv(outputs["markers_csv"])
+    assert list(markers["gene"]) == ["geneb", "GeneA"]
+    assert pd.read_csv(outputs["reference_pairs_csv"]).empty
+    manifest = json.loads(outputs["manifest"].read_text())
+    assert manifest["reference_source"] == "count_table"
+    assert manifest["reference_class_counts"] == {"Neurons": 5, "Astrocytes": 5}
+
+
+def test_run_mecr_reference_rejects_count_table_from_other_taxonomy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A table built at another taxonomy level must not be used silently."""
+    fixture = _write_whb_atlas_fixture(tmp_path)
+    table_path = _build_fixture_count_table(fixture, tmp_path / "counts.parquet")
+    monkeypatch.setattr(
+        "merxen.analysis.mecr.collect_spatial_panel_genes",
+        lambda _samples: PANEL_GENES,
+    )
+    config = MecrReferenceConfig(
+        output_dir=tmp_path / "reference_out",
+        samples=fixture.samples,
+        count_table_path=table_path,
+        target_broad_classes=["Neurons", "Astrocytes"],
+    )
+
+    with pytest.raises(ValueError, match="taxonomy_level"):
+        run_mecr_reference(config)
+
+
+def test_read_mecr_count_table_rejects_plain_parquet(tmp_path: Path) -> None:
+    """Parquet files without MerXen metadata are refused."""
+    path = tmp_path / "plain.parquet"
+    pd.DataFrame({"gene_token": ["genea"]}).to_parquet(path)
+
+    with pytest.raises(ValueError, match="not a MerXen MECR count table"):
+        read_mecr_count_table(path)
+
+
+def test_mecr_count_table_command_writes_table(tmp_path: Path) -> None:
+    """The CLI builds a readable table from atlas files."""
+    config = _write_whb_atlas_fixture(tmp_path)
+    output_path = tmp_path / "cli_counts.parquet"
+
+    result = CliRunner().invoke(
+        mecr_count_table_command,
+        [
+            "--h5ad",
+            str(config.neurons_h5ad_path),
+            "--h5ad",
+            str(config.nonneurons_h5ad_path),
+            "--cell-metadata",
+            str(config.cell_metadata_path),
+            "--taxonomy-metadata",
+            str(config.taxonomy_metadata_path),
+            "--cluster-membership",
+            str(config.cluster_membership_path),
+            "--taxonomy-level",
+            "SUPC",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert read_mecr_count_table(output_path).class_sizes["Neurons"] == 5

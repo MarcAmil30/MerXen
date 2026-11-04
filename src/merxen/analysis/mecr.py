@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,8 @@ if "ipykernel" not in sys.modules:
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import scanpy as sc
 import seaborn as sns
 from scipy import sparse
@@ -43,7 +46,17 @@ MECR_REFERENCE_PANEL_NAME = "mecr_reference_panel_genes.csv"
 MECR_REFERENCE_MANIFEST_NAME = "mecr_reference_manifest.json"
 MECR_REFERENCE_PAIRS_NAME = "mecr_reference_pairs.csv"
 MECR_REFERENCE_DISTRIBUTION_NAME = "mecr_reference_distribution.png"
+MECR_COUNT_TABLE_METADATA_KEY = b"merxen_mecr_count_table"
+MECR_COUNT_TABLE_FORMAT_VERSION = 1
 PAIR_ID_COLUMNS = ["gene_1", "class_1", "gene_2", "class_2"]
+PAIR_METRIC_COLUMNS = [
+    *PAIR_ID_COLUMNS,
+    "cells_gene_1",
+    "cells_gene_2",
+    "cells_both",
+    "cells_either",
+    "mecr",
+]
 BARNYARD_CANONICAL_PAIRS = (
     ("SLC17A7", "GFAP"),
     ("GAD1", "GFAP"),
@@ -69,6 +82,8 @@ def run_mecr_reference(config: MecrReferenceConfig) -> dict[str, Path]:
 
     panel_path = config.output_dir / MECR_REFERENCE_PANEL_NAME
     pd.DataFrame({"gene": panel_genes}).to_csv(panel_path, index=False)
+    if config.count_table_path is not None:
+        return _run_mecr_reference_from_count_table(config, panel_genes, panel_path)
     reference_name = "WMB" if config.reference_atlas == "wmb" else "WHB"
     log_status(
         f"Preparing {reference_name} MECR reference for "
@@ -162,6 +177,110 @@ def run_mecr_reference(config: MecrReferenceConfig) -> dict[str, Path]:
         del reference
         force_release(note=f"after {reference_name} MECR reference preparation")
 
+    return {
+        "markers_csv": markers_path,
+        "statistics_csv": stats_path,
+        "panel_genes_csv": panel_path,
+        "reference_pairs_csv": reference_pairs_path,
+        "reference_distribution_plot": reference_distribution_path,
+        "manifest": manifest_path,
+    }
+
+
+def _run_mecr_reference_from_count_table(
+    config: MecrReferenceConfig,
+    panel_genes: list[str],
+    panel_path: Path,
+) -> dict[str, Path]:
+    """Write the MECR reference outputs from a precomputed count table.
+
+    Skips the raw-atlas read and the Wilcoxon test. The atlas-baseline pair
+    table needs per-cell atlas data, so it is written empty and its plot
+    reports no pairs; nothing downstream reads either.
+    """
+    assert config.count_table_path is not None
+    count_table = read_mecr_count_table(config.count_table_path)
+    for field, expected in (
+        ("reference_atlas", config.reference_atlas),
+        ("taxonomy_level", config.taxonomy_level),
+        ("gene_symbol_column", config.gene_symbol_column),
+    ):
+        if count_table.metadata.get(field) != expected:
+            raise ValueError(
+                f"MECR count table {config.count_table_path} was built with "
+                f"{field}={count_table.metadata.get(field)!r}, but this run "
+                f"uses {expected!r}"
+            )
+    log_status(
+        f"Preparing MECR reference for {len(panel_genes):,} spatial panel genes "
+        f"from count table {config.count_table_path.name}"
+    )
+    statistics, markers = discover_markers_from_count_table(
+        count_table,
+        panel_genes,
+        target_classes=config.target_broad_classes,
+        min_target_fraction=config.marker_min_target_fraction,
+        max_other_fraction=config.marker_max_other_fraction,
+    )
+    stats_path = config.output_dir / MECR_REFERENCE_STATS_NAME
+    markers_path = config.output_dir / MECR_REFERENCE_MARKERS_NAME
+    reference_pairs_path = config.output_dir / MECR_REFERENCE_PAIRS_NAME
+    reference_distribution_path = config.output_dir / MECR_REFERENCE_DISTRIBUTION_NAME
+    statistics.to_csv(stats_path, index=False)
+    markers.to_csv(markers_path, index=False)
+    reference_pairs = pd.DataFrame(columns=PAIR_METRIC_COLUMNS)
+    reference_pairs.to_csv(reference_pairs_path, index=False)
+    plot_reference_mecr_histogram(
+        reference_pairs,
+        reference_distribution_path,
+        dpi=config.figure_dpi,
+    )
+
+    class_counts = {
+        label: count_table.class_sizes[label] for label in config.target_broad_classes
+    }
+    manifest_path = config.output_dir / MECR_REFERENCE_MANIFEST_NAME
+    manifest = {
+        "method": "paper_standard_mecr",
+        "reference_source": "count_table",
+        "reference": (
+            "Allen Whole Mouse Brain WMB-10X"
+            if config.reference_atlas == "wmb"
+            else "Allen Whole Human Brain WHB-10Xv3"
+        ),
+        "reference_atlas": config.reference_atlas,
+        "count_table_path": str(config.count_table_path),
+        "count_table_metadata": {
+            key: value
+            for key, value in count_table.metadata.items()
+            if key != "class_sizes"
+        },
+        "taxonomy_level": config.taxonomy_level,
+        "gene_symbol_column": config.gene_symbol_column,
+        "target_broad_classes": list(config.target_broad_classes),
+        "marker_min_target_fraction_strictly_greater_than": (
+            config.marker_min_target_fraction
+        ),
+        "marker_max_other_fraction_strictly_less_than": (
+            config.marker_max_other_fraction
+        ),
+        "wilcoxon": "skipped in count-table mode; statistics columns are NaN",
+        "reference_pairs": "skipped in count-table mode; needs per-cell atlas data",
+        "n_panel_genes": len(panel_genes),
+        "n_reference_panel_genes": int(statistics["gene"].nunique()),
+        "n_reference_cells": int(sum(class_counts.values())),
+        "reference_class_counts": class_counts,
+        "n_unique_markers": len(markers),
+        "n_reference_marker_pairs": None,
+        "outputs": {
+            "panel_genes_csv": str(panel_path),
+            "gene_statistics_csv": str(stats_path),
+            "markers_csv": str(markers_path),
+            "reference_pairs_csv": str(reference_pairs_path),
+            "reference_distribution_plot": str(reference_distribution_path),
+        },
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     return {
         "markers_csv": markers_path,
         "statistics_csv": stats_path,
@@ -565,6 +684,17 @@ def discover_reference_markers(
                 }
             )
 
+    return _select_unique_markers(rows)
+
+
+def _select_unique_markers(
+    rows: list[dict[str, Any]],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keep genes that pass the detection filters for exactly one class.
+
+    Shared by the raw-atlas and count-table routes so both select and order
+    markers identically.
+    """
     statistics = pd.DataFrame(rows)
     candidates = statistics[statistics["passes_detection_thresholds"]].copy()
     qualifying_class_counts = candidates.groupby("gene")["broad_class"].nunique()
@@ -582,6 +712,292 @@ def discover_reference_markers(
         ascending=[True, False, True, True],
     ).reset_index(drop=True)
     return statistics, markers
+
+
+@dataclass
+class MecrCountTable:
+    """Precomputed atlas detection counts for MECR marker discovery.
+
+    Attributes:
+        counts: One row per normalised gene symbol with ``gene_token`` and
+            ``gene_symbol``, then one integer column per broad class holding
+            the number of cells of that class in which the gene is detected.
+        class_sizes: Number of atlas cells in each broad class.
+        metadata: Provenance recorded at build time (atlas, taxonomy level,
+            gene symbol column, source files, detection rule).
+    """
+
+    counts: pd.DataFrame
+    class_sizes: dict[str, int]
+    metadata: dict[str, Any]
+
+
+def build_mecr_count_table(
+    h5ad_paths: list[Path],
+    class_by_cell: pd.Series,
+    output_path: Path,
+    *,
+    reference_atlas: str,
+    taxonomy_level: str,
+    gene_symbol_column: str = "gene_symbol",
+    chunk_rows: int = 25_000,
+) -> Path:
+    """Stream the raw atlas once and write a gene x broad-class count table.
+
+    A cell detects a gene when its raw counts, summed over every atlas column
+    sharing the gene's normalised symbol, are above zero. That is the rule
+    ``discover_reference_markers`` applies after panel selection, so markers
+    derived from the table match the raw-atlas route exactly. Every broad
+    class is counted, not only the default targets, so any target subset can
+    be evaluated later without rebuilding.
+
+    Args:
+        h5ad_paths: Raw atlas expression shards sharing one gene order.
+        class_by_cell: Broad class per atlas cell label.
+        output_path: Parquet file to write.
+        reference_atlas: ``"whb"`` or ``"wmb"``; recorded and checked at use.
+        taxonomy_level: Taxonomy level ``class_by_cell`` was derived from.
+        gene_symbol_column: ``var`` column holding gene symbols.
+        chunk_rows: Cells read per chunk; bounds peak memory.
+
+    Returns:
+        ``output_path``.
+
+    Raises:
+        ValueError: If shards disagree on gene order, or WHB cells lack class
+            metadata.
+    """
+    classes = sorted(str(label) for label in class_by_cell.dropna().unique())
+    class_index = {label: index for index, label in enumerate(classes)}
+    tokens: list[str] = []
+    symbol_by_token: dict[str, str] = {}
+    first_shard_tokens: np.ndarray | None = None
+    symbol_aggregator: sparse.csr_matrix | None = None
+    counts = np.zeros((len(classes), 0), dtype=np.int64)
+    class_sizes = np.zeros(len(classes), dtype=np.int64)
+    missing_metadata = 0
+
+    for h5ad_path in h5ad_paths:
+        reference = ad.read_h5ad(h5ad_path, backed="r")
+        try:
+            if gene_symbol_column not in reference.var:
+                raise KeyError(f"{h5ad_path} lacks var[{gene_symbol_column!r}]")
+            symbols = reference.var[gene_symbol_column].astype(str).to_numpy()
+            shard_tokens = np.array([_normalize_gene(symbol) for symbol in symbols])
+            if first_shard_tokens is None:
+                first_shard_tokens = shard_tokens
+                tokens = sorted(set(shard_tokens.tolist()))
+                token_index = {token: index for index, token in enumerate(tokens)}
+                for symbol, token in zip(symbols, shard_tokens, strict=True):
+                    symbol_by_token.setdefault(str(token), str(symbol))
+                # Columns sharing a symbol collapse onto one token, as the
+                # raw-atlas route sums them before thresholding.
+                symbol_aggregator = sparse.csr_matrix(
+                    (
+                        np.ones(len(shard_tokens), dtype=np.float32),
+                        (
+                            np.arange(len(shard_tokens)),
+                            [token_index[token] for token in shard_tokens],
+                        ),
+                    ),
+                    shape=(len(shard_tokens), len(tokens)),
+                )
+                counts = np.zeros((len(classes), len(tokens)), dtype=np.int64)
+            elif not np.array_equal(shard_tokens, first_shard_tokens):
+                raise ValueError(f"{h5ad_path} has a different gene order")
+            assert symbol_aggregator is not None
+
+            for start in range(0, reference.n_obs, chunk_rows):
+                stop = min(start + chunk_rows, reference.n_obs)
+                obs_names = reference.obs_names[start:stop].astype(str)
+                labels = class_by_cell.reindex(obs_names)
+                missing_metadata += int(labels.isna().sum())
+                keep = labels.notna().to_numpy()
+                if not np.any(keep):
+                    continue
+                raw = sparse.csr_matrix(reference.X[start:stop])[keep]
+                raw.data = (raw.data > 0).astype(np.float32)
+                detected = sparse.csr_matrix(raw @ symbol_aggregator)
+                detected.data = (detected.data > 0).astype(np.float32)
+                label_index = np.array(
+                    [class_index[str(label)] for label in labels[keep]]
+                )
+                class_membership = sparse.csr_matrix(
+                    (
+                        np.ones(len(label_index), dtype=np.float32),
+                        (label_index, np.arange(len(label_index))),
+                    ),
+                    shape=(len(classes), len(label_index)),
+                )
+                counts += np.rint((class_membership @ detected).toarray()).astype(
+                    np.int64
+                )
+                class_sizes += np.bincount(label_index, minlength=len(classes))
+                logger.info(
+                    "Counted MECR detection rows %s:%s from %s",
+                    start,
+                    stop,
+                    Path(h5ad_path).name,
+                )
+        finally:
+            reference.file.close()
+
+    if missing_metadata and reference_atlas == "whb":
+        raise ValueError(
+            f"WHB cell metadata was missing for {missing_metadata:,} reference cells"
+        )
+    if missing_metadata:
+        logger.warning(
+            "Skipped %d %s raw reference cells absent from taxonomy metadata",
+            missing_metadata,
+            reference_atlas.upper(),
+        )
+
+    frame = pd.DataFrame(counts.T, columns=classes)
+    frame.insert(0, "gene_symbol", [symbol_by_token[token] for token in tokens])
+    frame.insert(0, "gene_token", tokens)
+    metadata = {
+        "format_version": MECR_COUNT_TABLE_FORMAT_VERSION,
+        "reference_atlas": reference_atlas,
+        "taxonomy_level": taxonomy_level,
+        "gene_symbol_column": gene_symbol_column,
+        "detection_rule": (
+            "raw counts summed over columns sharing a casefolded symbol > 0"
+        ),
+        "source_h5ad": [
+            {"name": Path(path).name, "bytes": Path(path).stat().st_size}
+            for path in h5ad_paths
+        ],
+        "n_cells": int(class_sizes.sum()),
+        "n_raw_cells_without_taxonomy_metadata": int(missing_metadata),
+        "n_gene_tokens": len(tokens),
+        "class_sizes": {
+            label: int(size) for label, size in zip(classes, class_sizes, strict=True)
+        },
+    }
+    table = pa.Table.from_pandas(frame, preserve_index=False)
+    schema_metadata = dict(table.schema.metadata or {})
+    schema_metadata[MECR_COUNT_TABLE_METADATA_KEY] = json.dumps(metadata).encode()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(
+        table.replace_schema_metadata(schema_metadata),
+        output_path,
+        compression="zstd",
+    )
+    return output_path
+
+
+def read_mecr_count_table(path: Path) -> MecrCountTable:
+    """Load a count table written by ``build_mecr_count_table``.
+
+    Args:
+        path: Parquet file path.
+
+    Returns:
+        The counts, class sizes and provenance metadata.
+
+    Raises:
+        ValueError: If the file lacks MerXen metadata, has an unsupported
+            format version, or is missing columns its metadata promises.
+    """
+    table = pq.read_table(path)
+    raw_metadata = (table.schema.metadata or {}).get(MECR_COUNT_TABLE_METADATA_KEY)
+    if raw_metadata is None:
+        raise ValueError(f"{path} is not a MerXen MECR count table")
+    metadata = json.loads(raw_metadata)
+    if metadata.get("format_version") != MECR_COUNT_TABLE_FORMAT_VERSION:
+        raise ValueError(
+            f"{path} has MECR count table format "
+            f"{metadata.get('format_version')!r}; expected "
+            f"{MECR_COUNT_TABLE_FORMAT_VERSION}"
+        )
+    class_sizes = {
+        str(label): int(size) for label, size in metadata["class_sizes"].items()
+    }
+    counts = table.to_pandas()
+    missing = [
+        column
+        for column in ["gene_token", "gene_symbol", *class_sizes]
+        if column not in counts.columns
+    ]
+    if missing:
+        raise ValueError(f"{path} lacks count table columns: {missing}")
+    return MecrCountTable(counts=counts, class_sizes=class_sizes, metadata=metadata)
+
+
+def discover_markers_from_count_table(
+    count_table: MecrCountTable,
+    panel_genes: list[str],
+    *,
+    target_classes: list[str],
+    min_target_fraction: float = 0.25,
+    max_other_fraction: float = 0.01,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Apply the paper's detection filters to precomputed atlas counts.
+
+    Produces the same statistics and markers as ``discover_reference_markers``
+    on the same atlas and panel, except that the Wilcoxon columns are NaN.
+    They are audit-only: marker eligibility uses the detection fractions alone.
+
+    Args:
+        count_table: Table from ``read_mecr_count_table``.
+        panel_genes: Spatial panel gene names.
+        target_classes: Broad classes compared one-vs-rest.
+        min_target_fraction: Detection in the target class must exceed this.
+        max_other_fraction: Detection in the other classes must stay below this.
+
+    Returns:
+        A tuple of (per gene-class statistics, unique markers).
+
+    Raises:
+        ValueError: If a target class is absent or no panel gene matches.
+    """
+    missing = [
+        label for label in target_classes if count_table.class_sizes.get(label, 0) == 0
+    ]
+    if missing:
+        raise ValueError(f"Reference is missing target broad classes: {missing}")
+    panel_lookup = {_normalize_gene(gene): str(gene) for gene in panel_genes}
+    counts = count_table.counts
+    panel_counts = counts[counts["gene_token"].isin(list(panel_lookup))].copy()
+    if panel_counts.empty:
+        raise ValueError("No spatial panel genes matched reference gene symbols")
+    panel_counts["gene"] = panel_counts["gene_token"].map(panel_lookup)
+    panel_counts = panel_counts.sort_values(
+        "gene", key=lambda values: values.str.casefold(), kind="stable"
+    ).reset_index(drop=True)
+
+    rows: list[dict[str, Any]] = []
+    for broad_class in target_classes:
+        other_classes = [label for label in target_classes if label != broad_class]
+        n_target = count_table.class_sizes[broad_class]
+        n_other = sum(count_table.class_sizes[label] for label in other_classes)
+        target_detected = panel_counts[broad_class].to_numpy()
+        other_detected = panel_counts[other_classes].sum(axis=1).to_numpy()
+        for gene, target_count, other_count in zip(
+            panel_counts["gene"], target_detected, other_detected, strict=True
+        ):
+            target_fraction = float(target_count / n_target)
+            other_fraction = float(other_count / n_other)
+            rows.append(
+                {
+                    "gene": gene,
+                    "broad_class": broad_class,
+                    "target_fraction": target_fraction,
+                    "other_fraction": other_fraction,
+                    "n_target_cells": n_target,
+                    "n_other_cells": n_other,
+                    "wilcoxon_score": np.nan,
+                    "logfoldchange": np.nan,
+                    "p_value": np.nan,
+                    "p_value_adjusted": np.nan,
+                    "passes_detection_thresholds": (
+                        target_fraction > float(min_target_fraction)
+                        and other_fraction < float(max_other_fraction)
+                    ),
+                }
+            )
+    return _select_unique_markers(rows)
 
 
 def compute_mecr_pair_metrics(
@@ -607,17 +1023,7 @@ def compute_mecr_pair_metrics(
         "gene", key=lambda values: values.str.casefold()
     )
     marker_rows = marker_rows.reset_index(drop=True)
-    output_columns = [
-        "gene_1",
-        "class_1",
-        "gene_2",
-        "class_2",
-        "cells_gene_1",
-        "cells_gene_2",
-        "cells_both",
-        "cells_either",
-        "mecr",
-    ]
+    output_columns = PAIR_METRIC_COLUMNS
     if len(marker_rows) < 2:
         return pd.DataFrame(columns=output_columns)
 
@@ -1143,6 +1549,38 @@ def _load_atlas_broad_classes(config: MecrReferenceConfig) -> pd.Series:
     taxonomy_level = config.taxonomy_level
     if taxonomy_level is None:
         raise ValueError("MECR taxonomy_level has not been resolved")
+    return load_atlas_broad_classes(
+        cell_metadata_path,
+        taxonomy_metadata_path,
+        cluster_membership_path,
+        taxonomy_level=taxonomy_level,
+        reference_atlas=config.reference_atlas,
+    )
+
+
+def load_atlas_broad_classes(
+    cell_metadata_path: Path,
+    taxonomy_metadata_path: Path,
+    cluster_membership_path: Path,
+    *,
+    taxonomy_level: str,
+    reference_atlas: str,
+) -> pd.Series:
+    """Map every atlas cell label to its MECR broad class.
+
+    Args:
+        cell_metadata_path: Atlas ``cell_metadata.csv`` (cell label to cluster).
+        taxonomy_metadata_path: ``cluster_annotation_term.csv``.
+        cluster_membership_path: ``cluster_to_cluster_annotation_membership.csv``.
+        taxonomy_level: Taxonomy term set whose names define broad classes.
+        reference_atlas: ``"whb"`` or ``"wmb"``; used in error messages.
+
+    Returns:
+        Broad class indexed by cell label.
+
+    Raises:
+        ValueError: If any cell cannot be mapped to a broad class.
+    """
     taxonomy = pd.read_csv(taxonomy_metadata_path)
     taxonomy = taxonomy[
         taxonomy["cluster_annotation_term_set_label"].astype(str) == taxonomy_level
@@ -1179,7 +1617,7 @@ def _load_atlas_broad_classes(config: MecrReferenceConfig) -> pd.Series:
     cell_metadata["broad_class"] = cell_metadata["cluster_alias"].map(alias_to_class)
     if cell_metadata["broad_class"].isna().any():
         missing = int(cell_metadata["broad_class"].isna().sum())
-        atlas_name = config.reference_atlas.upper()
+        atlas_name = reference_atlas.upper()
         raise ValueError(
             f"Could not map {missing:,} {atlas_name} cells to a broad class"
         )
