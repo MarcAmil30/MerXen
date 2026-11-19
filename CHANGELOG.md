@@ -14,6 +14,21 @@ users would notice). A release turns [Unreleased] into the release's section.
 
 ## [Unreleased]
 
+### Added
+
+- **Container profiles.** `-profile docker` and `-profile singularity` run every stage in a registry image (`workflows/conf/containers.config`): `merxen` for all but the stages that pin software it cannot hold, plus `merxen-alignment`, `merxen-mender`, `merxen-clustering-gpu`, `merxen-pciseq` and `merxen-gaston`. The images are `<container_registry>/<image>:<container_tag>`; `containers/Dockerfile*` build them and model weights are baked in, so no stage downloads any at run time. The profiles also set the host values a site profile would (ProSeg binary, CPU counts, the memory budget), so a generic host needs no site config ([containers](docs/containers.md)).
+- **Flow.bio pipeline schema.** `flow/schema/merxen.json` and `flow/schema/merxen_simple.json` describe the pipeline as a Flow form, with `flow/conf/merxen.config`, `flow/conf/merxen_simple.config` and a per-server reference-file config. The simple form fixes the stage range at `build_spatialdata` to `mender` so a run cannot skip part of the pipeline.
+- **Annotation figures.** With `annotation_figures_enabled`, `ANNOTATION_FIGURES` draws three figures per section and segmentation after MapMyCells and MENDER: cell types from canonical markers, cell types from the Allen atlas, and MENDER tissue domains, plus a summary JSON and a per-cluster CSV (`workflows/modules/annotation_figures.nf`).
+- **One raw archive per sample.** A samplesheet row can give a `.tar.gz` or `.zip` of a raw MERSCOPE or Xenium export instead of a folder; `workflows/bin/merxen-unpack-raw` unpacks it in the task.
+- **Run-wide `xenium_channels`.** `params.xenium_channels` is the default for the samplesheet column of the same name; the row still wins, and the platform default is the last fallback.
+
+### Changed
+
+- **File inputs are Nextflow path inputs.** Every stage that reads a file now takes it as a `path` input and names it locally in its config, instead of receiving an absolute path inside a JSON string: the raw export, transform and spec for `BUILD_SPATIALDATA`; the built store and the transform/spec downstream of it; the annotation GeoJSONs for cortical depth and spatial genes; the images and alignment matrices for `REGISTER_IMAGES`; the Allen atlas files for `MECR_REFERENCE`, clustering and `MAPMYCELLS`; and the stores the readers open (`COMPARE`, `VISUALIZE`, `SPATIAL_GENE_ANALYSIS`, `MECR`, `CLUSTERING_SQUIDPY_PREPARE`). Nextflow therefore stages them, so a containerised run no longer depends on the work directory being visible inside the task. The samplesheet's file columns are declared in `workflows/nextflow_schema.json` and `workflows/assets/schema_input.json` and read with nf-schema (`nf-schema@2.5.1`, so Nextflow 25.04 or later). The ATERA routes are unchanged and still resolve their paths from params.
+- **Each writer works on its own store.** The stages after mask quantification no longer write into one shared `latest/latest_spatialdata.zarr` under `params.outdir`. Each takes the upstream store as a path input, makes its own hard-linked copy with `workflows/bin/merxen-link-copy` and declares that copy as its output, so per platform the stores form a chain: mask quantification, `ALIGN`, `MATERIALIZE_ALIGNMENT`, `CLUSTERING_SQUIDPY_IMPORT`, `COMPUTE_CORTICAL_DEPTH`, `DISTANCE_FROM_OBJECT_ANNOTATE`, `MENDER_IMPORT`. `SEGMENT` writes into its task folder and publishes from there instead of writing into `results/`. `latest/` follows the newest store in the chain and becomes a store of its own when the run ends. Two stages are now one task per platform rather than one per segmentation, `CLUSTERING_SQUIDPY_IMPORT` (new) and `MENDER_IMPORT`, so segmentations never write one store side by side; `workflow CLUSTERING_TABLES` (`workflows/subworkflows/clustering_tables.nf`) wires the clustered tables into the chain. Published layouts and manifest locations are unchanged. Lost on purpose: a stage no longer reuses an output an earlier run left in `results/`; `-resume` covers reruns within a run.
+- **Root `nextflow.config`.** A config at the repository root makes `nextflow run <repo>` work, so Flow can launch the pipeline by repository rather than by script path.
+
+
 ## [1.1.1] - 2026-11-18
 
 ### Fixed
