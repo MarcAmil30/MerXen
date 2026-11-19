@@ -88,6 +88,7 @@ PRIVATE_FILE_PATTERNS: Final = (
     "*/.aliases.tsv",
     "workflows/conf/site.config",
     "workflows/conf/*.site.config",
+    "flow/conf/flow.site.config",
 )
 
 _BASE64_LINE_RE: Final = re.compile(r'^\s*"?[A-Za-z0-9+/=]{76,}(?:\\n)?"?,?\s*$')

@@ -14,6 +14,16 @@ and say in the pull request which caches it invalidates and why.
 
 Changes made so far:
 
+- Flow.bio (2026-11-19): every stage that reads a file now takes it as a
+  Nextflow ``path`` input and names it locally, and every writer after mask
+  quantification works on its own hard-linked copy of the store instead of
+  one shared store under ``params.outdir``. Both change the ``script:`` text
+  of the stages involved, so the cache of their completed tasks is
+  invalidated and they run again once. Results are unchanged: the same files
+  reach the same code under local names. New pins: ``ANNOTATION_FIGURES``
+  (``modules/annotation_figures.nf``) and ``CLUSTERING_SQUIDPY_IMPORT``
+  (``modules/clustering_squidpy.nf``).
+
 - v1.0.2 security fix: ``ALIGN`` (``modules/alignment.nf``) exports
   ``PYTORCH_CUDA_ALLOC_CONF`` only when ``alignment_pytorch_cuda_alloc_conf``
   is set. Unset, it rendered the literal ``null``, on which torch 2.14 (the
@@ -176,17 +186,17 @@ def test_main_nf_defines_no_process() -> None:
 
 
 def test_pinned_inventory(pinned: dict[str, str]) -> None:
-    """Today's inventory: 67 ``script:`` and 18 ``stub:`` sections.
+    """Today's inventory: 69 ``script:`` and 18 ``stub:`` sections.
 
     AT-9 added the three ATERA ProSeg processes, RCA added annotation processes,
     AT-8 added the streaming MECR reference, and AT-7 added
     ATERA_CELLPOSE_SEGMENT and ATERA_PROSEG_PLAN_CELLPOSE. The stock-comparison
     process adds one more script, and PCISEQ_COMPUTE_BATCHED one script and
-    one stub. PREPARE_HITL_VIEWER adds one CPU preparation script;
-    no existing pin changed.
+    one stub. PREPARE_HITL_VIEWER adds one CPU preparation script. The
+    Flow.bio stack adds ANNOTATION_FIGURES and CLUSTERING_SQUIDPY_IMPORT.
     """
     labels = [key.rsplit("::", 1)[1] for key in pinned]
-    assert labels.count("script") == 67
+    assert labels.count("script") == 69
     assert labels.count("stub") == 18
     assert {key for key in pinned if key.endswith("::stub")} == {
         f"workflows/modules/pciseq.nf::{name}::stub"

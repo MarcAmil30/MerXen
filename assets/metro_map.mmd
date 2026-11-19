@@ -163,6 +163,7 @@ graph LR
         mapmycells[MapMyCells]
         mapmycells_out[ ]
         mender[MENDER domains]
+        annotation_figures[Annotation figures]
         annotate_panel[Gene panel]
         annotate_reference_prep[Reference prep]
         clustering_squidpy_annotate_map[Map cells]
@@ -177,6 +178,7 @@ graph LR
         annotate_reference_prep -->|optional| clustering_squidpy_annotate_map
         clustering_squidpy_annotate_map -->|optional| clustering_squidpy_annotate_resolve
         clustering_squidpy_annotate_resolve -->|optional| clustering_squidpy_compute_cpu
+        mender -->|optional| annotation_figures
         mender -->|optional| annotation_report
     end
 

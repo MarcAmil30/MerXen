@@ -139,7 +139,9 @@ SPANS: tuple[Span, ...] = (
         "renderEnrich(key, pairId, platform, latestZarr, maskPath, nucleiMaskPath, "
         "originalDataPath, rowSource = null)",
         "enrich_inputs_ch = segment_results_ch",
-        "def persistentLatestZarrPath",
+        # ENRICH works on its own copy and declares it as an output, so the
+        # builder no longer resolves persistent_* paths under params.outdir.
+        "def enrichConfig = [",
         "\n            tuple(",
         "def enrichConfig = [",
         "enrichConfig",
@@ -152,18 +154,13 @@ SPANS: tuple[Span, ...] = (
         "def explicitLatestZarr =",
         "explicitLatestZarr",
     ),
+    # The viewer transform is no longer a row lookup: nf-schema reads the
+    # platform's transformPathFields column and the file is staged, so the
+    # config names it. There is no viewerTransformField span any more.
     Span(
-        "viewerTransformField(row, platform)",
-        "viewer_cache_transform_ch =",
-        "def transformPath",
-        "\n                tuple(",
-        "def transformPath =",
-        "transformPath",
-    ),
-    Span(
-        "renderViewerCache(key, pairId, platform, enrichedLatestZarr, transformPath)",
+        "renderViewerCache(key, pairId, platform, enrichedLatestZarr, transformFile)",
         "viewer_cache_inputs_ch = post_registration_zarrs_ch",
-        "def resolvedTransform",
+        "def viewerCacheConfig = [",
         "\n            tuple(",
         "def viewerCacheConfig = [",
         "viewerCacheConfig",

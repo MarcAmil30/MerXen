@@ -167,9 +167,14 @@ def test_hook_sites_are_pinned() -> None:
         assert relative in EXPECTED_HOOKS[hook], (relative, hook)
 
 
+# Both stages also take the staged atlas reference files, and PREPARE takes
+# the sample stores it opens (legacy_clustering_inputs_ch, built right above
+# the hook), so that a containerised run reaches neither through the host.
 LEGACY_CLUSTERING_STATEMENTS = (
-    "clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(clustering_inputs_ch)",
-    "clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(clustering_prepared_ch)",
+    "clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE("
+    "legacy_clustering_inputs_ch, clustering_reference_ch)",
+    "clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE("
+    "clustering_prepared_ch, clustering_reference_ch)",
 )
 
 
@@ -361,7 +366,7 @@ def test_h11_reports_after_mender_in_map_first_runs_only() -> None:
         "clustering_results_ch = CLUSTERING_SQUIDPY_FINALIZE(",
         "compute_cortical_depth_results_ch = COMPUTE_CORTICAL_DEPTH(",
         "mender_finalized_ch = MENDER_FINALIZE(",
-        "MENDER_IMPORT(mender_finalized_ch)",
+        "MENDER_IMPORT(mender_import_current_ch",
     ):
         assert main_text.index(upstream) < hook, upstream
     assert main_text.count("ANNOTATION_REPORTING(") == 1

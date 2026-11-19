@@ -1,7 +1,7 @@
 // Appended by test_platform_config_golden.py to the Groovy functions of
 // workflows/main.nf and to wrappers around the inline config builders of its
 // workflow block (renderSegment, renderEnrich, renderViewerCache,
-// viewerTransformField, enrichRestartField, renderMaskImageQuantification) and
+// enrichRestartField, renderMaskImageQuantification) and
 // the QC script (renderQcScript).
 // It renders the platform-dependent configs of MERSCOPE and XENIUM rows and
 // prints one line per case:
@@ -172,16 +172,14 @@ def ateraNativeCases(String launch) {
             segmentationSourceForRow(row, ["ATERA"], params)
         }
         attempt("enrich", "${rowId}/restart_latest_zarr") { enrichRestartField(row, "ATERA") }
-        attempt("viewer_cache", "${rowId}/transform_field") {
-            viewerTransformField(row, "ATERA")
-        }
+        // ATERA rows carry no transform or spec column, so nothing is staged.
         attempt("viewer_cache", rowId) {
             renderViewerCache(
                 "PAIR_A|ATERA",
                 "PAIR_A",
                 "ATERA",
                 "enriched_latest.zarr",
-                viewerTransformField(row, "ATERA"),
+                [],
             )
         }
     }
@@ -578,16 +576,14 @@ def rowCases(String launch, String platform) {
             CellposeSettings.channelsForRow(row, platform)
         }
         attempt("enrich", "${id}/restart_latest_zarr") { enrichRestartField(row, platform) }
-        attempt("viewer_cache", "${id}/transform_field") {
-            viewerTransformField(row, platform)
-        }
+        // The staged transform/spec file, whatever column it came from.
         attempt("viewer_cache", id) {
             renderViewerCache(
                 "PAIR_A|${platform}",
                 "PAIR_A",
                 platform,
                 "enriched_latest.zarr",
-                viewerTransformField(row, platform),
+                file("staged_transform.json"),
             )
         }
         attempt("pciseq", "${id}/spatialdata_path") {

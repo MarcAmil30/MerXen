@@ -57,8 +57,9 @@ goes from `build_spatialdata` to `mender` with MECR and MENDER on, and the
 three GeoJSON stages off. MapMyCells defaults to `whole_brain`, which uses the
 uploaded precomputed stats; `region` and `both` download about 38 GB from
 Allen and build a frontal reference on every run. The Allen files come from
-`flow/conf/staging3.config` (paths under `/media/storage/staging3/uploads/`);
-another Flow server needs its own copy of that file.
+`flow/conf/flow.site.config`, which is gitignored because its paths belong to
+one server; copy `flow.site.config.example` and fill in that server's upload
+paths, or point `$MERXEN_FLOW_SITE_CONFIG` at a copy elsewhere.
 
 ### Figures version (0.3, branch `feat/flow-figures`)
 

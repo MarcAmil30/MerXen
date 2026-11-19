@@ -1,6 +1,6 @@
 // Appended by test_platform_registry_groovy.py to the Groovy functions of
 // workflows/main.nf and the span wrappers of the golden harness
-// (enrichRestartField, viewerTransformField, ...). It prints
+// (enrichRestartField, segmentationSourceForRow, ...). It prints
 //
 //     REGISTRY <TAB> <compact JSON of PlatformSpec.REGISTRY>
 //     PROSEG_LAYERS <TAB> <compact JSON of AteraProsegLayers>
@@ -65,7 +65,6 @@ def unknownPlatformCases(String platform) {
         pciseqSpatialdataPath(row, [pair_id: "PAIR_A"], platform, params)
     }
     recordUnknown("${platform}/enrich_restart_field") { enrichRestartField(row, platform) }
-    recordUnknown("${platform}/viewer_transform_field") { viewerTransformField(row, platform) }
     recordUnknown("${platform}/require_platform_input") {
         requirePlatformInput(row, "PAIR_A", platform)
     }

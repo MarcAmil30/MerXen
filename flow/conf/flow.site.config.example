@@ -1,0 +1,29 @@
+// Flow server: the Allen Whole Human Brain (WHB) reference files.
+//
+// Template for flow/conf/flow.site.config, which is gitignored because the
+// paths belong to one server. Upload the files once with flowbio; Flow then
+// stores each upload under its own data-id folder, and the ids stay fixed
+// unless a file is deleted and uploaded again. Copy this file to
+// flow/conf/flow.site.config and fill in that server's paths, or point
+// MERXEN_FLOW_SITE_CONFIG at a copy elsewhere.
+
+params {
+    // MECR (about 38 GB)
+    mecr_whb_neurons_h5ad_path       = "/path/to/flow/uploads/WHB-10Xv3-Neurons-raw.h5ad"
+    mecr_whb_nonneurons_h5ad_path    = "/path/to/flow/uploads/WHB-10Xv3-Nonneurons-raw.h5ad"
+    mecr_whb_cell_metadata_path      = "/path/to/flow/uploads/cell_metadata.csv"
+    mecr_whb_taxonomy_metadata_path  = "/path/to/flow/uploads/cluster_annotation_term.csv"
+    mecr_whb_cluster_membership_path = "/path/to/flow/uploads/cluster_to_cluster_annotation_membership.csv"
+
+    // Clustering broad cell classes
+    clustering_squidpy_whb_marker_lookup_path      = "/path/to/flow/uploads/query_markers.n10.20240221800.json"
+    clustering_squidpy_whb_taxonomy_metadata_path  = "/path/to/flow/uploads/cluster_annotation_term.csv"
+    clustering_squidpy_whb_cluster_membership_path = "/path/to/flow/uploads/cluster_to_cluster_annotation_membership.csv"
+
+    // MapMyCells whole-brain mapping (8.7 GB precomputed stats)
+    mapmycells_whb_marker_lookup_path     = "/path/to/flow/uploads/query_markers.n10.20240221800.json"
+    mapmycells_whb_precomputed_stats_path = "/path/to/flow/uploads/precomputed_stats.siletti.training.h5"
+
+    // Gene symbol to Ensembl ID table
+    annotation_gene_id_fallback_csv = "/path/to/flow/uploads/gene.csv"
+}

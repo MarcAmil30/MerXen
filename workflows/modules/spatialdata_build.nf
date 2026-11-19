@@ -23,7 +23,8 @@ process BUILD_SPATIALDATA {
         : "ln -sfn '../${raw_input}' '${platform}/${raw_input}'"
     buildConfig.input_path = "${platform}/${rawFolder}".toString()
     if (aux_input) {
-        def auxField = platform == "MERSCOPE" ? "merscope_transform_path" : "xenium_spec_path"
+        // the transform (MERSCOPE) or spec (XENIUM) column, per the registry
+        def auxField = PlatformSpec.forName(platform).transformPathFields[0]
         buildConfig[auxField] = "${aux_input}".toString()
     }
     def buildConfigText = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(buildConfig))

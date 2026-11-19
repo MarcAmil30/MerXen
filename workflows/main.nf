@@ -4371,6 +4371,20 @@ def segmentationConfigMap(
         baseConfig.bead_mask_veto = meta.bead_mask_veto
     }
 
+    // The transform (MERSCOPE) or spec (XENIUM) file. On the staged route it is
+    // the staged samplesheet file, under the field the platform registry names;
+    // ATERA stages neither and keeps the paths the row gave.
+    def datasetAux = [
+        transform_path: meta.transform_path,
+        xenium_spec_path: meta.xenium_spec_path,
+    ]
+    if (stagedSourceName) {
+        datasetAux = [transform_path: null, xenium_spec_path: null]
+        if (auxFile) {
+            datasetAux[PlatformSpec.forName(platform).transformPathFields[0]] = auxFile.name
+        }
+    }
+
     def segmentConfig = baseConfig + [
         dataset: [
             name: "${pairId}_${platform}",
@@ -4389,12 +4403,8 @@ def segmentationConfigMap(
             persistent_nuclei_stitching_stats_path: persistentNucleiStitchingStatsPath,
             image_prefix: meta.image_prefix,
             z_range: meta.z_range,
-            transform_path: stagedSourceName
-                ? (platform == "MERSCOPE" && auxFile ? auxFile.name : null)
-                : meta.transform_path,
-            xenium_spec_path: stagedSourceName
-                ? (platform == "XENIUM" && auxFile ? auxFile.name : null)
-                : meta.xenium_spec_path,
+            transform_path: datasetAux.transform_path,
+            xenium_spec_path: datasetAux.xenium_spec_path,
             min_qv: meta.min_qv,
             proseg_overrides: [voxel_layers: meta.voxel_layers],
         ],
@@ -6480,6 +6490,12 @@ workflow {
             .mix(clustering_after_visualize_ch)
             .mix(clustering_after_spatial_gene_analysis_ch)
 
+    // PREPARE opens the sample stores, so they are staged inputs too.
+    legacy_clustering_inputs_ch = clustering_inputs_ch.map {
+        pairId, segmentation, samplesJson ->
+            [pairId, segmentation] + stageSampleZarrs(samplesJson)
+    }
+
     // The atlas files the broad annotation reads are staged, so nothing
     // outside the task folder has to be visible (both clustering modes).
     clustering_reference_ch = channel.value(
@@ -6671,15 +6687,8 @@ workflow {
                 )
             )
     } else {
-        clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(
-            clustering_inputs_ch.map { pairId, segmentation, samplesJson ->
-                [pairId, segmentation] + stageSampleZarrs(samplesJson)
-            },
-            clustering_reference_ch,
-        )
-        clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(
-            clustering_prepared_ch, clustering_reference_ch
-        )
+        clustering_prepared_ch = CLUSTERING_SQUIDPY_PREPARE(legacy_clustering_inputs_ch, clustering_reference_ch)
+        clustering_computed_ch = CLUSTERING_SQUIDPY_COMPUTE(clustering_prepared_ch, clustering_reference_ch)
     }
     clustering_results_ch = CLUSTERING_SQUIDPY_FINALIZE(clustering_computed_ch)
 
@@ -7486,7 +7495,11 @@ workflow {
                 )
         }
     mender_finalized_ch = MENDER_FINALIZE(mender_finalize_inputs_ch)
-    pair_settings_ch = sample_rows_ch.map { pairId, _row, settings -> tuple(pairId, settings) }
+    // post_pciseq, not sample_rows_ch: the stores below are read after
+    // every pciSeq writer has finished
+    pair_settings_ch = post_pciseq_sample_rows_ch.map {
+        pairId, _row, settings -> tuple(pairId, settings)
+    }
     // The newest store per platform once cortical depth and distance from
     // object (each on its own copy) are done; MENDER imports into a copy of it.
     post_terminal_zarrs_ch = distance_from_object_annotation_results_ch
@@ -7894,26 +7907,6 @@ workflow {
         }
     }
 
-    // rca-hook:H11: the annotation QC report (plan §3.6, §9; M7), map_first runs only:
-    // after FINALIZE, the pair's cortical depth and the branch's MENDER when they run.
-    if (AnnotationSettings.isMapFirstRun(params) && AnnotationReport.enabled(params)) {
-        ANNOTATION_REPORTING(
-            CLUSTERING_MAP_FIRST.out.labels,
-            CLUSTERING_MAP_FIRST.out.alignment,
-            clustering_results_ch,
-            compute_cortical_depth_results_ch.map { _key, pairId, platform, _latestZarr, corticalDepthOut ->
-                tuple(pairId, platform, corticalDepthOut)
-            },
-            mender_finalized_ch.map {
-                _taskKey, pairId, segmentation, platform, _sampleId, _spatialdataPath,
-                _sourceSpatialdataTable, _nativeShapeKey, _sourceH5adPath, _menderConfig, menderDir ->
-                    tuple(pairId, segmentation, platform, menderDir)
-            },
-            sample_rows_ch.map { pairId, _row, settings -> tuple(pairId, AnnotationReport.pairSpec(settings, params)) },
-        )
-    }
-
-
     // latest/ is a symlink to the last store in the chain while the run is
     // going; at the end it becomes a store of its own (bin/merxen-link-copy),
     // so a later run or a reader does not depend on the work directory.
@@ -7943,4 +7936,24 @@ workflow {
             }
         ANNOTATION_FIGURES(annotation_figures_inputs_ch)
     }
+
+    // rca-hook:H11: the annotation QC report (plan §3.6, §9; M7), map_first runs only:
+    // after FINALIZE, the pair's cortical depth and the branch's MENDER when they run.
+    if (AnnotationSettings.isMapFirstRun(params) && AnnotationReport.enabled(params)) {
+        ANNOTATION_REPORTING(
+            CLUSTERING_MAP_FIRST.out.labels,
+            CLUSTERING_MAP_FIRST.out.alignment,
+            clustering_results_ch,
+            compute_cortical_depth_results_ch.map { _key, pairId, platform, _latestZarr, corticalDepthOut ->
+                tuple(pairId, platform, corticalDepthOut)
+            },
+            mender_finalized_ch.map {
+                _taskKey, pairId, segmentation, platform, _sampleId, _spatialdataPath,
+                _sourceSpatialdataTable, _nativeShapeKey, _sourceH5adPath, _menderConfig, menderDir ->
+                    tuple(pairId, segmentation, platform, menderDir)
+            },
+            sample_rows_ch.map { pairId, _row, settings -> tuple(pairId, AnnotationReport.pairSpec(settings, params)) },
+        )
+    }
+
 }
