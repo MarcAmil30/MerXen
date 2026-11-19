@@ -34,13 +34,13 @@ LEGACY_PROCESSES = (
 
 EXPECTED_SHA256: dict[str, str] = {
     "CLUSTERING_SQUIDPY_PREPARE": (
-        "f415e43e13f9d711b89f0a384343a912c3d972b6663458526c67e7b2a8365d5c"
+        "f6d550ca5bda6ed93dd8265d0940e995875046d8296c5de131dbaedafe70f5e3"
     ),
     "CLUSTERING_SQUIDPY_COMPUTE": (
-        "c6fe538637d65f369deb83a4a50269241af76106d4a6ae73d0af7379f8ae2bfc"
+        "4346e30d96d3a35c306781fbaa501ae6c739d5df0eb63195d081079efa758b32"
     ),
     "CLUSTERING_SQUIDPY_FINALIZE": (
-        "f432a219dc76a850d0faac2261fe02fe0e6e39b2aab4ab1a2706f22c6f84c8d3"
+        "f6f463d9c31465ab0d8cc8637509bfea4855e8069c1f3e9e8612b2dab3ac656f"
     ),
     # M5 (hook H5): the legacy PREPARE -> COMPUTE statements moved into the
     # else-branch of the map_first switch; process texts and defaults are
@@ -61,7 +61,7 @@ EXPECTED_SHA256: dict[str, str] = {
     # hippocampal profile separately. The legacy else branch, the three
     # legacy process scripts and their defaults remain byte-identical.
     "main.nf wiring": (
-        "33f1dd3be75eb6e0a9cc2f1c4d2c3e13f7d2fd7622e9706dd316278e42d9cbeb"
+        "1f7652077ebe56db62f8c1b51d75b694f2a12c7308bdb33bdfa4235edc575db0"
     ),
     # 2026-10-15 (privacy clean-up): four host-location params the legacy
     # clustering reads (the broad reference cache directory and three WHB
@@ -71,8 +71,16 @@ EXPECTED_SHA256: dict[str, str] = {
     # compared before and after, with the site config), so the task texts,
     # legacy task hashes and -resume are too.
     "param defaults": (
-        "4e7c16d4e65037667139301de8c2da639eb6a1b9a1d17876a1454beeedccec4d"
+        "ea1116f1dbf7be3e4a0adf1d0e295e870a8dbc0f2cce272261fb5df148a6ef20"
     ),
+    # 2026-11-19 (Flow.bio): the Allen atlas files the broad annotation reads
+    # are now staged as Nextflow path inputs, so PREPARE and COMPUTE take a
+    # second input tuple and name those files locally, PREPARE also takes the
+    # sample stores it opens, FINALIZE no longer writes the clustered table
+    # into the zarr (CLUSTERING_SQUIDPY_IMPORT does, once per platform), and
+    # main.nf passes the staged references in both clustering modes. This
+    # invalidates the -resume cache of every legacy clustering run. Results
+    # are unchanged: the same files reach the same code under local names.
 }
 
 
