@@ -10,6 +10,8 @@ one of them; the `docker` and `singularity` profiles use it.
 | `merxen-alignment` | `ALIGN`, `MATERIALIZE_ALIGNMENT` | `containers/Dockerfile.alignment` |
 | `merxen-mender` | `MENDER_COMPUTE` | `containers/Dockerfile.mender` |
 | `merxen-clustering-gpu` | `CLUSTERING_SQUIDPY_COMPUTE` when `clustering_squidpy_use_gpu` | `containers/Dockerfile.clustering-gpu` |
+| `merxen-pciseq` | `PCISEQ_COMPUTE`, `PCISEQ_COMPUTE_BATCHED` | `containers/Dockerfile.pciseq` |
+| `merxen-gaston` | `GASTON_GLM_PCA`, `GASTON_TRAIN`, `GASTON_POSTPROCESS` | `containers/Dockerfile.gaston` |
 
 Images are named `<container_registry>/<image>:<container_tag>`, by default
 `ghcr.io/bourdenxlab/merxen:0.1.0`.
@@ -24,6 +26,8 @@ docker build -f containers/Dockerfile                 -t $REG/merxen:$TAG .
 docker build -f containers/Dockerfile.alignment       -t $REG/merxen-alignment:$TAG .
 docker build -f containers/Dockerfile.mender          -t $REG/merxen-mender:$TAG .
 docker build -f containers/Dockerfile.clustering-gpu  -t $REG/merxen-clustering-gpu:$TAG .
+docker build -f containers/Dockerfile.pciseq          -t $REG/merxen-pciseq:$TAG .
+docker build -f containers/Dockerfile.gaston          -t $REG/merxen-gaston:$TAG .
 docker push $REG/merxen:$TAG   # and the other three
 ```
 

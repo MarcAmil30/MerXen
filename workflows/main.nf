@@ -4215,7 +4215,7 @@ def validateMenderParams(params) {
 // and MERSCOPE maps are built as before, key for key.
 def segmentationConfigMap(
     pairId, platform, sourceSpatialdata, meta, params,
-    auxFile = null, stagedSourceName = null,
+    auxFile = null, stagedSourceName = null
 ) {
     def persistentLatestZarrPath = file(
         publishedDatasetPath(
