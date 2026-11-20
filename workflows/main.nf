@@ -6865,7 +6865,7 @@ workflow {
             }
         }
 
-    compute_cortical_depth_after_clustering_ch = downstream_zarrs_ch
+    compute_cortical_depth_after_clustering_ch = clustered_zarrs_ch
         .join(compute_cortical_depth_after_clustering_gate_ch)
         .map { key, pairId, platform, latestZarr, row, analysisSegmentations ->
             tuple(pairId, key, platform, latestZarr, row, analysisSegmentations)
@@ -6982,7 +6982,7 @@ workflow {
             }
         }
 
-    distance_from_object_after_clustering_ch = downstream_zarrs_ch
+    distance_from_object_after_clustering_ch = clustered_zarrs_ch
         .join(distance_from_object_after_clustering_gate_ch)
         .map {
             key, pairId, platform, latestZarr, row, distanceSegmentations ->
