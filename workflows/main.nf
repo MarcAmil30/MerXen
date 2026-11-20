@@ -5293,7 +5293,10 @@ workflow {
             // rest.
             if (PlatformSpec.forName(platform).nativeLatestBase) {
                 enrichConfig.segmentation_source = "native"
-                enrichConfig.transcript_density_source_path = originalDataPath
+                // The staged name, as every other path in this config: the file is
+                // the same one original_data_path names, and a java.nio.file.Path
+                // here makes JsonOutput.toJson recurse until it overflows.
+                enrichConfig.transcript_density_source_path = "source_spatialdata.zarr"
                 enrichConfig.mask_path = null
                 enrichConfig.nuclei_mask_path = null
             }
