@@ -45,6 +45,23 @@
                 "format": "file-path",
                 "exists": true,
                 "description": "Optional Xenium experiment spec"
+            },
+            "atera_dir": {
+                "type": "string",
+                "format": "path",
+                "exists": true,
+                "description": "Raw Atera ROI bundle: a folder, or a .tar, .tar.gz, .tgz or .zip of one"
+            },
+            "atera_spatialdata_path": {
+                "type": "string",
+                "format": "directory-path",
+                "description": "Existing Atera SpatialData zarr, used when atera_dir is empty"
+            },
+            "atera_spec_path": {
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "description": "Optional Atera experiment spec"
             }
         },
         "required": ["pair_id"]

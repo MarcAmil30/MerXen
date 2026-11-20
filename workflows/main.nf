@@ -4474,10 +4474,12 @@ workflow {
     // [] marks an empty optional column.
     sample_files_ch = channel
         .fromList(samplesheetToList(params.samplesheet, "${projectDir}/assets/schema_input.json"))
-        .map { meta, merscopeDir, merscopeZarr, merscopeTransform, xeniumDir, xeniumZarr, xeniumSpec ->
+        .map { meta, merscopeDir, merscopeZarr, merscopeTransform, xeniumDir, xeniumZarr,
+               xeniumSpec, ateraDir, ateraZarr, ateraSpec ->
             tuple(meta.pair_id, [
                 MERSCOPE: [input: merscopeDir ?: merscopeZarr, aux: merscopeTransform],
                 XENIUM: [input: xeniumDir ?: xeniumZarr, aux: xeniumSpec],
+                ATERA: [input: ateraDir ?: ateraZarr, aux: ateraSpec],
             ])
         }
 
