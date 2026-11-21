@@ -220,6 +220,7 @@ class TilingConfig(BaseModel):
     min_remaining_fraction: float = 0.05
     edge_touch_policy: Literal["keep", "skip"] = "keep"
     write_stitching_stats: bool = True
+    skip_empty_tiles: bool = True
 
     @field_validator("tile_size_candidates")
     @classmethod

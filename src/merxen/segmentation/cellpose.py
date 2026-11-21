@@ -234,6 +234,99 @@ def iter_core_tiles(
     return tiles
 
 
+def tile_is_empty(source: np.ndarray) -> bool:
+    """Report whether a fetched tile holds no signal at all.
+
+    A crop that keeps the vendor canvas so micron coordinates stay valid leaves
+    every pixel outside the kept window at the zarr fill value, so most tiles
+    of the grid are uniformly zero. Cellpose spends the same wall clock on such
+    a tile as on tissue, so they are worth a cheap test.
+
+    The test is deliberately conservative: a tile counts as empty only when
+    every selected channel is zero everywhere. An image with a non-zero camera
+    offset or background therefore never skips a tile.
+
+    Args:
+        source: Fetched tile, any channel layout.
+
+    Returns:
+        True when the tile holds no non-zero pixel.
+    """
+    return not bool(np.any(source))
+
+
+def _signal_center(source: np.ndarray) -> tuple[int, int]:
+    """Return the tile-local center of a tile's non-zero bounding box.
+
+    The geometric center of the tile is not good enough: on a crop the signal
+    can sit against one edge, and a probe at a small candidate tile size would
+    then build its window around fill value again.
+
+    Args:
+        source: Fetched tile whose first two axes are y and x.
+
+    Returns:
+        ``(y, x)`` offsets inside the tile.
+    """
+    other = tuple(range(2, source.ndim))
+    rows = np.any(source, axis=(1, *other))
+    cols = np.any(source, axis=(0, *other))
+    row_idx = np.flatnonzero(rows)
+    col_idx = np.flatnonzero(cols)
+    return (
+        int((row_idx[0] + row_idx[-1]) // 2),
+        int((col_idx[0] + col_idx[-1]) // 2),
+    )
+
+
+def find_signal_probe_center(
+    fetch_tile_fn: Any,
+    height: int,
+    width: int,
+    tile_size: int,
+    dataset_name: str,
+) -> tuple[int, int] | None:
+    """Return the center of the first grid tile that holds signal.
+
+    Scanned in the order the tiling loop uses, so the tile-size probe measures
+    a tile the loop will really segment. Without this the probe lands on the
+    geometric center, which on a corner crop is fill value: the probe then
+    reports zero labels and the chosen tile size was never measured against
+    real signal.
+
+    Args:
+        fetch_tile_fn: Callable(y0, y1, x0, x1) -> ndarray.
+        height: Image height.
+        width: Image width.
+        tile_size: Window size to scan with.
+        dataset_name: Name for logging.
+
+    Returns:
+        ``(y, x)`` center of the signal in the first tile holding any, or None
+        when the whole image is empty.
+    """
+    for t in iter_core_tiles(
+        height=height, width=width, tile_size=tile_size, overlap=0
+    ):
+        source = fetch_tile_fn(t["tile_y0"], t["tile_y1"], t["tile_x0"], t["tile_x1"])
+        empty = tile_is_empty(source)
+        center = None if empty else _signal_center(source)
+        del source
+        if center is not None:
+            cy = t["tile_y0"] + center[0]
+            cx = t["tile_x0"] + center[1]
+            log_status(
+                f"[{dataset_name}] Probing on the signal at y={cy}, x={cx}, found "
+                f"in tile y={t['tile_y0']}..{t['tile_y1']}, "
+                f"x={t['tile_x0']}..{t['tile_x1']}"
+            )
+            return cy, cx
+    log_status(
+        f"[{dataset_name}] No tile holds signal; falling back to the center tile"
+    )
+    return None
+
+
 def choose_working_tile_size(
     fetch_tile_fn: Any,
     height: int,
@@ -242,10 +335,11 @@ def choose_working_tile_size(
     config: CellposeConfig,
     candidates: list[int],
     dataset_name: str,
+    probe_center: tuple[int, int] | None = None,
 ) -> int:
     """Benchmark tile sizes and select the largest that fits in GPU memory.
 
-    Probes a center tile at each candidate size, starting from the largest.
+    Probes one tile at each candidate size, starting from the largest.
     Falls back to smaller sizes on OOM errors.
 
     Args:
@@ -256,6 +350,8 @@ def choose_working_tile_size(
         config: Cellpose parameters.
         candidates: Tile sizes to try, largest first.
         dataset_name: Name for logging.
+        probe_center: Pixel to center the probe window on. Defaults to the
+            image center, which is fill value on a corner crop.
 
     Returns:
         The largest working tile size.
@@ -263,8 +359,13 @@ def choose_working_tile_size(
     Raises:
         RuntimeError: If no candidate tile size works.
     """
-    cy = int(height) // 2
-    cx = int(width) // 2
+    if probe_center is None:
+        cy = int(height) // 2
+        cx = int(width) // 2
+        probe_where = "center tile"
+    else:
+        cy, cx = (int(v) for v in probe_center)
+        probe_where = f"tile around y={cy}, x={cx}"
 
     for ts in candidates:
         ts = int(ts)
@@ -275,7 +376,7 @@ def choose_working_tile_size(
         y0 = max(0, y1 - ts)
         x0 = max(0, x1 - ts)
 
-        log_status(f"[{dataset_name}] Probing Cellpose tile size={ts} on center tile")
+        log_status(f"[{dataset_name}] Probing Cellpose tile size={ts} on {probe_where}")
         tile = img_seg = masks = flows = styles = None
         try:
             tile = fetch_tile_fn(y0, y1, x0, x1)
@@ -283,10 +384,17 @@ def choose_working_tile_size(
                 tile, factor_rescale=1.0, normalization=config.input_normalization
             )
             masks, flows, styles = run_cellpose_model_eval(model, img_seg, config)
+            labels_in_probe = int(np.max(masks))
             log_status(
                 f"[{dataset_name}] Tile size {ts} succeeded "
-                f"(labels in probe={int(np.max(masks))})"
+                f"(labels in probe={labels_in_probe})"
             )
+            if labels_in_probe == 0:
+                log_status(
+                    f"[{dataset_name}] WARNING: the probe found no labels, so "
+                    f"tile size {ts} was never measured against real signal; "
+                    "check the channels, the model and the crop extent"
+                )
             return ts
         except (RuntimeError, MemoryError) as e:
             msg = str(e).lower()
@@ -519,6 +627,7 @@ def run_cellpose_tile(
     *,
     filter_per_tile: bool = True,
     include_cellprobs: bool = True,
+    source: np.ndarray | None = None,
 ) -> CellposeTileResult:
     """Execute the same halo-tile input and filtering operation in every caller.
 
@@ -530,13 +639,15 @@ def run_cellpose_tile(
         mask_filter_config: Effective per-tile filtering settings.
         filter_per_tile: Apply the production region-property filter.
         include_cellprobs: Extract probability logits when required by the caller.
+        source: Tile already fetched by the caller, to save a second read.
 
     Returns:
         Whole-tile uint8 model input, raw/filtered labels and probability logits.
     """
-    source = fetch_tile_fn(
-        tile["tile_y0"], tile["tile_y1"], tile["tile_x0"], tile["tile_x1"]
-    )
+    if source is None:
+        source = fetch_tile_fn(
+            tile["tile_y0"], tile["tile_y1"], tile["tile_x0"], tile["tile_x1"]
+        )
     _, model_input, _ = prepare_cellpose_input(
         source, factor_rescale=1.0, normalization=cellpose_config.input_normalization
     )
@@ -637,6 +748,18 @@ def run_tiled_cellpose(
             "No valid tile sizes in tile_size_candidates after min_tile_size filter"
         )
 
+    probe_center = (
+        find_signal_probe_center(
+            fetch_tile_fn=fetch_tile_fn,
+            height=height,
+            width=width,
+            tile_size=max(candidates),
+            dataset_name=dataset_name,
+        )
+        if tiling_config.skip_empty_tiles
+        else None
+    )
+
     tile_size = choose_working_tile_size(
         fetch_tile_fn=fetch_tile_fn,
         height=height,
@@ -645,6 +768,7 @@ def run_tiled_cellpose(
         config=cellpose_config,
         candidates=candidates,
         dataset_name=dataset_name,
+        probe_center=probe_center,
     )
 
     if before_overwrite is not None:
@@ -703,6 +827,7 @@ def run_tiled_cellpose(
         "tile_size": int(tile_size),
         "stitch_overlap_px": int(tiling_config.stitch_overlap_px),
         "tiles_total": len(tiles),
+        "empty_tiles_skipped": 0,
         "duplicate_iou_threshold": float(tiling_config.duplicate_iou_threshold),
         "duplicate_overlap_fraction": float(tiling_config.duplicate_overlap_fraction),
         "min_remaining_fraction": float(tiling_config.min_remaining_fraction),
@@ -734,6 +859,31 @@ def run_tiled_cellpose(
             warn_gb=memory_config.memory_warn_gb,
         )
 
+        source = fetch_tile_fn(t["tile_y0"], t["tile_y1"], t["tile_x0"], t["tile_x1"])
+        if tiling_config.skip_empty_tiles and tile_is_empty(source):
+            del source
+            stitch_stats["empty_tiles_skipped"] += 1
+            pbar.set_postfix_str(
+                f"labels={next_label - 1:,} "
+                f"empty={stitch_stats['empty_tiles_skipped']:,}"
+            )
+            if i % int(tiling_config.status_every_tiles) == 0:
+                log_status(
+                    f"[{dataset_name}] tile {i}/{len(tiles)} held no signal; "
+                    f"empty so far={stitch_stats['empty_tiles_skipped']:,}; "
+                    f"accepted labels={next_label - 1:,}"
+                )
+                if progress_callback is not None:
+                    progress_callback(
+                        "cellpose_tiling",
+                        tiles_done=i,
+                        tiles_total=len(tiles),
+                        pct=round(100 * i / len(tiles), 1),
+                        labels_found=next_label - 1,
+                        duplicate_skipped=stitch_stats["duplicate_skipped"],
+                    )
+            continue
+
         result = run_cellpose_tile(
             fetch_tile_fn,
             t,
@@ -742,6 +892,7 @@ def run_tiled_cellpose(
             mask_filter_config,
             filter_per_tile=tiling_config.filter_per_tile,
             include_cellprobs=cellprob_mem is not None,
+            source=source,
         )
         raw_label_count = _count_positive_labels(result.raw_masks)
 
