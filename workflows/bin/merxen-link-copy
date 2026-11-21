@@ -9,6 +9,13 @@
 # in place fails with "Permission denied" instead of changing the upstream
 # store. On a different filesystem it falls back to a plain copy.
 #
+# Modification times are part of a store's identity: MerXen fingerprints an
+# image element by (path, size, mtime_ns), so a copy that keeps every byte but
+# resets the times reads as a *different* native image, and ENRICH then
+# refuses its own transcript density ("Transcript density belongs to a
+# different native image"). Hard links keep the times for free; the copy
+# fallbacks may not, so they are restored from the source afterwards.
+#
 # Only file modes and times are kept, not owners, ACLs or extended
 # attributes: inside a rootless container those cannot be set ("preserving
 # permissions ... Invalid argument" on CephFS), and the store needs none.
@@ -16,6 +23,14 @@ set -euo pipefail
 
 src=$1
 dst=$2
+
+restore_times () {
+    find "$dst" -mindepth 1 -type f -printf '%P\n' | while IFS= read -r rel; do
+        if [ -e "$src/$rel" ]; then
+            touch -r "$src/$rel" "$dst/$rel"
+        fi
+    done
+}
 
 # a task Slurm ran twice in one work folder (sbatch timed out after
 # submitting, Nextflow submitted again) finds dst already there
@@ -30,7 +45,13 @@ if ! cp -R -P --link "$src/." "$dst/" 2>/dev/null; then
         # refuse even mode bits; the store needs no particular modes
         rm -rf "$dst"
         mkdir "$dst"
-        cp -R -P "$src/." "$dst/"
+        if ! cp -R -P --preserve=timestamps "$src/." "$dst/" 2>/dev/null; then
+            rm -rf "$dst"
+            mkdir "$dst"
+            cp -R -P "$src/." "$dst/"
+        fi
     fi
+    # only the copy fallbacks can lose times; make them faithful again
+    restore_times
 fi
 find "$dst" -type f -links +1 -exec chmod a-w {} +
