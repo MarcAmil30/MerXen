@@ -5922,7 +5922,7 @@ workflow {
             mecr_samples_by_reference_ch.atera
                 .combine(mecr_atera_reference_results_ch)
                 .map { pairId, segmentation, samplesJson, referenceOut ->
-                    tuple(pairId, segmentation, samplesJson, referenceOut)
+                    [pairId, segmentation] + stageSampleZarrs(samplesJson) + [referenceOut]
                 }
         )
     mecr_results_ch = MECR(mecr_inputs_ch)
