@@ -3,7 +3,7 @@
     {
       "name": "Samples",
       "advanced": false,
-      "description": "One row per section: the MERSCOPE and/or Xenium export of the same tissue, with its annotations and per-section options.",
+      "description": "One row per section: the MERSCOPE, Xenium and/or Atera export of the same tissue, with its annotations and per-section options.",
       "params": {
         "samplesheet": {
           "name": "Sections",
@@ -27,7 +27,8 @@
                 "",
                 "paired",
                 "merscope",
-                "xenium"
+                "xenium",
+                "atera"
               ]
             },
             {
@@ -107,6 +108,21 @@
               "pattern": "csv"
             },
             {
+              "name": "atera_dir",
+              "type": "data",
+              "description": "Raw Atera ROI bundle, uploaded as one .tar, .tar.gz, .tgz or .zip.",
+              "render": true,
+              "required": false
+            },
+            {
+              "name": "atera_spec_path",
+              "type": "data",
+              "description": "Optional Atera experiment spec.",
+              "render": true,
+              "required": false,
+              "pattern": "json"
+            },
+            {
               "name": "enable_alignment",
               "type": "string",
               "render": true,
@@ -115,6 +131,20 @@
                 "",
                 "true",
                 "false"
+              ]
+            },
+            {
+              "name": "segmentation_source",
+              "type": "string",
+              "description": "Where cells come from: native (vendor masks, ATERA), native_proseg, cellpose_only or cellpose_proseg.",
+              "render": true,
+              "required": false,
+              "valid": [
+                "",
+                "native",
+                "native_proseg",
+                "cellpose_only",
+                "cellpose_proseg"
               ]
             },
             {
