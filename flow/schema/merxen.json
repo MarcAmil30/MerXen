@@ -554,7 +554,7 @@
         "container_tag": {
           "name": "Tag",
           "type": "string",
-          "default": "0.1.0",
+          "default": "1.1.1",
           "required": false,
           "description": "Image tag."
         }
