@@ -5897,9 +5897,8 @@ workflow {
     mecr_reference_inputs_ch = mecrReferenceInputs(
         mecr_samples_by_reference_ch.standard, true
     )
-    // The atlas files MECR_REFERENCE reads are staged, so nothing outside the
-    // task folder has to be visible. MECR_REFERENCE_ATERA still resolves them
-    // from params inside its script.
+    // The atlas files both references read are staged, so nothing outside the
+    // task folder has to be visible.
     mecr_reference_files_ch = channel.value(stageReferenceInputs(
         mecrReferenceFiles(normalizeSpecies(params.species) == "mouse" ? "wmb" : "whb"),
         "reference_cache_dir",
@@ -5911,7 +5910,7 @@ workflow {
         mecr_samples_by_reference_ch.atera
     )
     mecr_atera_reference_results_ch = MECR_REFERENCE_ATERA(
-        mecr_atera_reference_inputs_ch
+        mecr_atera_reference_inputs_ch, mecr_reference_files_ch
     )
     mecr_inputs_ch = mecr_samples_by_reference_ch.standard
         .combine(mecr_reference_results_ch)

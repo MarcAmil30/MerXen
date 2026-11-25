@@ -48,7 +48,7 @@
   "workflows/modules/mask_image_quantification.nf::MASK_IMAGE_QUANTIFICATION::script": "1f54c6654dcc0c0bfc77cc00991d09fb5c4404ce9edd51c8529a1c1b7d20be19",
   "workflows/modules/mecr.nf::MECR::script": "caec0a7d36a69220ba8889595ffc254338ba9321b53e3b45c9ec44bf37de29f0",
   "workflows/modules/mecr.nf::MECR_REFERENCE::script": "f8d2049daddb3275e37a12c3a236623f5b22ecb7a0d2afa98d6a5f1fbfcdb901",
-  "workflows/modules/mecr.nf::MECR_REFERENCE_ATERA::script": "718fd64029f88923539d756dba7100ead7fb9e86d71d2b73454cde41d324ba8d",
+  "workflows/modules/mecr.nf::MECR_REFERENCE_ATERA::script": "058429b7d6b0742aa5da1ee0b55da3160dfad9ecb0ffa3be70f0b45938714836",
   "workflows/modules/mender.nf::MENDER_COMPUTE::script": "42d42c67048fb0d1db4e92f299203f54173079476333e23d99c61482eb15caf1",
   "workflows/modules/mender.nf::MENDER_FINALIZE::script": "e4f07ef2a30a88fa73b52aaee07072492e852876a4fb144855db31314345305f",
   "workflows/modules/mender.nf::MENDER_IMPORT::script": "e5b94c439157d3dceac7577663d06cf8e9db64bab71ab3bbd2278bb4ab0aaa5a",

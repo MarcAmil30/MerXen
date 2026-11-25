@@ -24,6 +24,12 @@ Changes made so far:
   (``modules/annotation_figures.nf``) and ``CLUSTERING_SQUIDPY_IMPORT``
   (``modules/clustering_squidpy.nf``).
 
+- Flow.bio (2026-11-25): ``MECR_REFERENCE_ATERA`` (``modules/mecr.nf``) takes
+  the atlas reference files as the same staged ``path`` input as
+  ``MECR_REFERENCE`` instead of resolving them from params inside its script,
+  where a container cannot see them. Only that pin changes; its tasks run
+  again once.
+
 - v1.0.2 security fix: ``ALIGN`` (``modules/alignment.nf``) exports
   ``PYTORCH_CUDA_ALLOC_CONF`` only when ``alignment_pytorch_cuda_alloc_conf``
   is set. Unset, it rendered the literal ``null``, on which torch 2.14 (the
