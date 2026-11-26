@@ -13,6 +13,9 @@ def mapMyCellsReferenceInputs() {
         gene_mapping_db_path: params.mapmycells_gene_mapping_db_path,
         gene_id_fallback_csv: geneIdFallbackDisabled ? null : geneIdFallbackPath,
         region_cache_dir: params.mapmycells_region_cache_dir == null ? file(params.outdir).toAbsolutePath().resolve("mapmycells_cache") : params.mapmycells_region_cache_dir,
+        // A tar of built region references (references/<name>-<hash>/), unpacked
+        // into the region cache before mapping so nothing is downloaded or built.
+        region_reference_archive: params.mapmycells_region_reference_archive,
     ].collectEntries { field, value -> [(field): value == null ? null : value.toString()] }
 }
 
@@ -54,6 +57,7 @@ process MAPMYCELLS {
     def defaultRegionName = pipelineSpecies == "mouse" ? "region" : "frontal_a44_a45_a46_a32_acc"
     def regionNameJson = params.mapmycells_region_name == null ? groovy.json.JsonOutput.toJson(defaultRegionName) : groovy.json.JsonOutput.toJson(params.mapmycells_region_name.toString())
     def regionCacheDirJson = groovy.json.JsonOutput.toJson(reference_inputs.region_cache_dir)
+    def regionReferenceArchive = reference_inputs.region_reference_archive ?: ""
     def plotsOnly = params.mapmycells_plots_only == null ? false : params.mapmycells_plots_only.toString().trim().toLowerCase() == "true"
     def plotsOnlyJson = plotsOnly ? "true" : "false"
     def publishedMapMyCellsOut = "${params.outdir}/${pair_id}/${segmentation}/mapmycells/mapmycells_out"
@@ -107,6 +111,27 @@ process MAPMYCELLS {
         fi
         rm -rf mapmycells_out
         cp -a "\${previous_mapmycells_out}" mapmycells_out
+    fi
+
+    # Prebuilt region references: put each build of the archive into the region
+    # cache unless it is already there. The rename is atomic, so tasks that
+    # start together cannot leave a half-written build; the loser discards its copy.
+    region_reference_archive="${regionReferenceArchive}"
+    if [[ -n "\${region_reference_archive}" ]]; then
+        region_references="${reference_inputs.region_cache_dir}/references"
+        mkdir -p "\${region_references}"
+        first_build="\$( (tar -tf "\${region_reference_archive}" || true) | head -n 1 | cut -d/ -f1)"
+        if [[ -z "\${first_build}" || ! -e "\${region_references}/\${first_build}" ]]; then
+            unpack_dir="\$(mktemp -d "\${region_references}/.archive-XXXXXX")"
+            tar -xf "\${region_reference_archive}" -C "\${unpack_dir}"
+            for build in "\${unpack_dir}"/*/; do
+                build_name="\$(basename "\${build}")"
+                if [[ ! -e "\${region_references}/\${build_name}" ]]; then
+                    mv -T "\${build%/}" "\${region_references}/\${build_name}" 2>/dev/null || true
+                fi
+            done
+            rm -rf "\${unpack_dir}"
+        fi
     fi
 
     cat > mapmycells_config.json <<JSON

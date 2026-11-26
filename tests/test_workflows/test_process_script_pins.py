@@ -24,6 +24,12 @@ Changes made so far:
   (``modules/annotation_figures.nf``) and ``CLUSTERING_SQUIDPY_IMPORT``
   (``modules/clustering_squidpy.nf``).
 
+- Flow.bio (2026-11-26): ``MAPMYCELLS`` (``modules/mapmycells.nf``) unpacks
+  the optional ``mapmycells_region_reference_archive`` into the region cache
+  before mapping. On Flow the cache is new in every run, so each run
+  downloaded the 38 GB atlas and rebuilt the region reference. Unset, the
+  step does nothing. Only that pin changes; its tasks run again once.
+
 - Flow.bio (2026-11-25): ``MECR_REFERENCE_ATERA`` (``modules/mecr.nf``) takes
   the atlas reference files as the same staged ``path`` input as
   ``MECR_REFERENCE`` instead of resolving them from params inside its script,

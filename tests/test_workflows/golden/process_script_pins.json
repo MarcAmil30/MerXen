@@ -44,7 +44,7 @@
   "workflows/modules/manual_registration.nf::MANUAL_REGISTRATION_PREPARE::stub": "f2a7b3079f89461848f10d62701df9d9e654f10ed76cd5de56e22f6f505e79e6",
   "workflows/modules/manual_registration.nf::MANUAL_REGISTRATION_REGISTER::script": "f3a636a1aab1c7e0db262b604e7f3054dc8c3fb3e556e2db42420cdf42b72b57",
   "workflows/modules/manual_registration.nf::MANUAL_REGISTRATION_REGISTER::stub": "70f276a77df9023ecb33e68fbd7919e828383ac4f53824adf8bd87d23971de73",
-  "workflows/modules/mapmycells.nf::MAPMYCELLS::script": "0dbe8d8d2297de035c0eb56544d14d7ee67668c5e898cc6f7c951866c1cd1c36",
+  "workflows/modules/mapmycells.nf::MAPMYCELLS::script": "27c0d5cac3e54af645828307549fd964ec2cbdd075b7d04682828b0e2e2cf958",
   "workflows/modules/mask_image_quantification.nf::MASK_IMAGE_QUANTIFICATION::script": "1f54c6654dcc0c0bfc77cc00991d09fb5c4404ce9edd51c8529a1c1b7d20be19",
   "workflows/modules/mecr.nf::MECR::script": "caec0a7d36a69220ba8889595ffc254338ba9321b53e3b45c9ec44bf37de29f0",
   "workflows/modules/mecr.nf::MECR_REFERENCE::script": "f8d2049daddb3275e37a12c3a236623f5b22ecb7a0d2afa98d6a5f1fbfcdb901",
